@@ -26,16 +26,20 @@ python scripts/download_server.py bayarea --dest ~/carla_servers
 tmux new -d -s carla scripts/start_carla.sh ~/carla_servers/BayArea_carla0916_server_v1 4100
 #    server log: tmux attach -t carla (detach: Ctrl-b d)
 
-# 2. ScenarioRunner 0.9.16 and its Python packages
+# 2. ScenarioRunner 0.9.16, its Python packages, and CARLA's `agents` package (not on PyPI;
+#    only that folder of the CARLA 0.9.16 source, about 1 MB)
 git clone --branch v0.9.16 https://github.com/carla-simulator/scenario_runner.git ~/scenario_runner
 pip install carla==0.9.16 -r ~/scenario_runner/requirements.txt
+git clone --depth 1 --filter=blob:none --sparse --branch 0.9.16 \
+    https://github.com/carla-simulator/carla.git ~/carla-0.9.16-src
+git -C ~/carla-0.9.16-src sparse-checkout set PythonAPI/carla/agents
 
 # 3. scenario files (private dataset), then one run: 8 camera views + 8 edge views, 200 frames each
 hf download <scenario dataset> --repo-type dataset \
     --include "Page_Mill_Rd_Palo_Alto_CA/*" --local-dir ~/m2d_osc
 python scripts/run_osc.py ~/m2d_osc/Page_Mill_Rd_Palo_Alto_CA/variants/scenario_00_ego_5105.xosc \
     --port 4100 --out runs/ --sr-root ~/scenario_runner \
-    --carla-pythonapi ~/carla_servers/BayArea_carla0916_server_v1/PythonAPI/carla
+    --carla-pythonapi ~/carla-0.9.16-src/PythonAPI/carla
 ```
 
 The output is in `runs/scenario_00_ego_5105/`:

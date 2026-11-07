@@ -2,7 +2,7 @@
 
 ```bash
 python scripts/run_osc.py <file>.xosc --port 4100 --out runs/ \
-    --sr-root ~/scenario_runner --carla-pythonapi ~/carla_servers/<server>/PythonAPI/carla
+    --sr-root ~/scenario_runner --carla-pythonapi ~/carla-0.9.16-src/PythonAPI/carla
 # Munich server only, to switch its German lamp heads dark as in the clips:
 #   --lamp-bridge <server>/lights_bridge/4100/control --lamp-heads <server>/german_light_heads.json
 ```
@@ -74,7 +74,7 @@ The exit status is 0 only when `ok` is true.
 
 ```bash
 cd ~/scenario_runner
-PYTHONPATH=~/carla_servers/<server folder>/PythonAPI/carla python scenario_runner.py \
+PYTHONPATH=~/carla-0.9.16-src/PythonAPI/carla python scenario_runner.py \
     --openscenario <file>.xosc --sync --frameRate 10 --timeout 300 --port 4100
 ```
 

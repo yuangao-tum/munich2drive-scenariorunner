@@ -98,9 +98,18 @@ pip install carla==0.9.16                        # the client must match the ser
 pip install -r ~/scenario_runner/requirements.txt
 ```
 
-ScenarioRunner also imports CARLA's `agents` package, which is not on PyPI. Both server folders
-contain it: pass `--carla-pythonapi ~/carla_servers/<server folder>/PythonAPI/carla` to
-`run_osc.py`, or set `CARLA_ROOT=~/carla_servers/<server folder>`.
+ScenarioRunner also imports CARLA's `agents` package, which is not on PyPI. Take it from the
+CARLA 0.9.16 source on GitHub; the sparse clone fetches only that folder (about 1 MB):
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse --branch 0.9.16 \
+    https://github.com/carla-simulator/carla.git ~/carla-0.9.16-src
+git -C ~/carla-0.9.16-src sparse-checkout set PythonAPI/carla/agents
+```
+
+Then pass `--carla-pythonapi ~/carla-0.9.16-src/PythonAPI/carla` to `run_osc.py`. Each server
+folder holds the same package, so `--carla-pythonapi ~/carla_servers/<server folder>/PythonAPI/carla`
+or `CARLA_ROOT=~/carla_servers/<server folder>` work as well.
 
 ## 4. The scenario files
 
