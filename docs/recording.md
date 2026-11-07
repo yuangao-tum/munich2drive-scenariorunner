@@ -13,10 +13,10 @@ in-process:
 
 | Patch | Why |
 |---|---|
-| weather | The scenario's exact CARLA weather (`Carla_*` parameters) is set before the actors spawn, and again where ScenarioRunner applies the `Environment`. ScenarioRunner itself rebuilds the weather from CARLA defaults and sets only sun, cloudiness, fog distance and rain; a cloudy scenario then gets a black sky on these maps. |
+| weather | The scenario's exact CARLA weather (`Carla_*` parameters) is set before the traffic spawns (the ego comes first) and long before the first frame, and again where ScenarioRunner applies the `Environment`. ScenarioRunner itself rebuilds the weather from CARLA defaults and sets only sun, cloudiness, fog distance and rain; a cloudy scenario then gets a black sky on these maps. |
 | time | OpenSCENARIO's `SimulationTimeCondition` is absolute simulation time. ScenarioRunner starts its clock when the event starts, which makes every `DeleteEntityAction` fire 0.2 s late. Here the conditions count from t = 0; `TimeOut`, which ScenarioRunner uses for condition delays and its own timeout, keeps its clock. |
 | spawning | ScenarioRunner spawns every agent 0.2 m above its pose and only warns when CARLA refuses one, which happens when its body touches the road or another car (0–48 agents per variant in the test, of 83–189). Refused agents are spawned again with more lift, then high in the air. Agents beyond UE4's 10.48 km physics bound (Munich's east end) are spawned inside it and moved out; otherwise CARLA reports a 0 × 0 × 0 bounding box for them. |
-| route planner | ScenarioRunner builds CARLA's `GlobalRoutePlanner` for every map. On Belmont, three road segments never reach their end by `next()`, and the planner's loop grows until the process is killed. Here every segment's walk is capped. |
+| route planner | ScenarioRunner builds CARLA's `GlobalRoutePlanner` for every map, twice per run. On Belmont, three road segments never reach their end by `next()`, and the planner's loop grows until the process is killed. Here every segment's walk is capped; the cap also cuts three Munich segments short. A replay does not use the planner: ScenarioRunner follows a trajectory's vertices as a "shortest" route. |
 | ticks | Every actor's pose comes from the replay controller's placement (`osc/osc_replay_control.py`): all poses for a tick go out in one synchronous batch right before the world tick. A controller's own `set_transform` is asynchronous and once in ~37,000 actor-frames landed after the tick. Before the first tick every actor is placed, the Munich lamp heads go dark and the cameras are attached; one extra tick films t = 0. After each tick the script waits for every camera's image of exactly that frame, so no frame is lost or doubled. |
 
 **Placement.** It is the same as in the munich2drive clips, with physics off:
@@ -54,18 +54,31 @@ scene's, not the codec's: grayscale → ffmpeg `edgedetect` (low 0.08, high 0.25
 
 **`run.json`:**
 
-- `ok`: true only when the run completed with every agent and every frame of every view.
-- `completed`, `frames_captured` / `frames_expected`, and `capture_error` if a capture failed.
+- `ok`: true only when every entry of `checks` is true (`failed_checks` lists the others):
+  - `completed`: all `frames_expected` frames (the file's `HorizonSteps`) were captured;
+  - `views_complete`: every view has every frame, none missed, and ffmpeg succeeded;
+  - `every_agent_spawned`: no agent lost at spawn;
+  - `every_actor_in_every_frame`: no actor missing from a frame before its removal;
+  - `removed_on_time`: no actor visible after its removal;
+  - `poses_within_tolerance`: every actor within `--pose-tolerance` (5 cm) of the file, in position
+    and height;
+  - `pose_batches_applied`: CARLA applied every pose;
+  - `frames_in_step`: every frame one tick and 0.1 s after the previous one (another client ticking
+    the same server breaks this);
+  - `lamps_switched`: the Munich lamp heads switched (`--lamp-bridge` only).
+- `completed`, `frames_captured` / `frames_expected`, and `capture_error` if a capture failed;
+  `frame_errors` with examples when frames were out of step.
 - `spawn`: agents CARLA refused and how they were recovered; `lost` must be empty.
 - `colors_as_file`: actors whose colour is the one in the file, out of those with a colour.
-- `weather`, `lamps`, and `planner_segments_capped`.
+- `weather`, `lamps`, and `planner_segments_capped` (road segments whose walk was capped).
 - `pose_audit`:
   - `max_m`, `p99_m`, `median_m`: each actor's largest distance between its reference point (the
     ego's box centre, every other vehicle's origin) and its trajectory, summarised over all actors;
   - `max_dz_m`: the largest height error against the placement;
   - `worst`: the five worst actors;
   - `frames_over_5cm`: up to 30 frames with any actor more than 5 cm off;
-  - `in_view_after_delete`: frames in which an actor was still visible after its removal.
+  - `missing_actor_frames`: actor-frames in which an actor was absent before its removal;
+  - `in_view_after_delete`: actor-frames in which an actor was still visible after its removal.
 - `views`: frames, missed frames and the ffmpeg exit code per view.
 
 The exit status is 0 only when `ok` is true.
@@ -75,7 +88,8 @@ The exit status is 0 only when `ok` is true.
 ```bash
 cd ~/scenario_runner
 PYTHONPATH=~/carla-0.9.16-src/PythonAPI/carla python scenario_runner.py \
-    --openscenario <file>.xosc --sync --frameRate 10 --timeout 300 --port 4100
+    --openscenario <file>.xosc --sync --frameRate 10 --timeout 300 --port 4100 \
+    --trafficManagerPort 8100
 ```
 
 This runs a file only if CARLA spawns every agent. CARLA refuses an agent whose body touches the road
@@ -92,13 +106,15 @@ agents again and caps the planner.
 When plain ScenarioRunner does run a file, the controller places every agent, reads its trajectory
 from the file, and takes a removed agent out of view on time. Only the sun position, cloudiness and
 rain amount of the weather are reproduced. `scripts/sr_live_check.py` runs plain ScenarioRunner on a
-file and audits the poses from a second client.
+file and audits the poses from a second client. ScenarioRunner's Traffic Manager port defaults to
+8000, so give two runs on one machine different ones (`sr_live_check.py` uses the server port +
+4000, as `run_osc.py`).
 
 ## Your own ego stack
 
 Set the `hero` controller's `module` property to `external_control` (Storyboard > Init > Private
-`hero`) and delete the `ManeuverGroup` named `mg_hero`. `run_osc.py` places only agents that have a
-trajectory in the file, so the ego is left to your controller and the cameras still follow it. The ego
+`hero`) and delete the `ManeuverGroup` named `mg_hero`. `run_osc.py` places only entities that have
+a `ManeuverGroup` in the file, so the ego is left to your controller and the cameras still follow it. The ego
 spawns with its CARLA origin on the Init position, which is the footprint centre. EDGAR's origin is
 its rear axle, so move the `hero` Init `WorldPosition` 1.52 m back along its heading:
 x − 1.52·cos h, y − 1.52·sin h. The other agents keep their recorded motion and do not react to the ego.

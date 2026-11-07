@@ -26,7 +26,8 @@ def row(d: Path) -> str:
     col = r.get("colors_as_file") or [0, 0]
     psnr = ssim = "–"
     if c:
-        vv = [v for v in c["views"].values() if "psnr_db" in v]
+        vv = [v for v in c["views"].values()
+              if v.get("psnr_db") is not None and v.get("ssim") is not None]
         psnr = f"{mean([v['psnr_db'] for v in vv]):.1f}" if vv else "–"
         ssim = f"{mean([v['ssim'] for v in vv]):.3f}" if vv else "–"
     m = r.get("map", "")
@@ -34,12 +35,12 @@ def row(d: Path) -> str:
             f"{sp.get('stock_refused', 0)} / {len(sp.get('respawned', {}))} / {len(sp.get('lost', []))} | "
             f"{col[0]}/{col[1]} | {'/'.join(map(str, frames)) or '–'} ({missed} missed) | "
             f"{pa.get('max_m', '–')} | {psnr} | {ssim} | {r['wall_s'] / 60:.1f} | "
-            f"{'yes' if r.get('completed') else 'NO'} |")
+            f"{'yes' if r.get('ok', r.get('completed')) else 'NO'} |")
 
 
 def main():
     print("| Clip | Map | Entities | Actors | Refused / recovered / lost | Colours | Frames per view "
-          "| Pose max (m) | PSNR (dB) | SSIM | Wall (min) | Completed |")
+          "| Pose max (m) | PSNR (dB) | SSIM | Wall (min) | OK |")
     print("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for a in sys.argv[1:]:
         print(row(Path(a)))

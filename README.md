@@ -7,10 +7,13 @@ The scenarios themselves (Munich and Bay Area maps, base scenarios and ego varia
 generated are in **munich2drive-openscenario**. This repository is only about running and rendering
 them.
 
-| Map family | Maps | CARLA 0.9.16 server (private Hugging Face dataset repo) |
-|---|---|---|
-| Munich | `Munich_Route_1` | `Yuan-avs/Munich_Route_1_carla0916` |
-| Bay Area | `Page_Mill_Rd_Palo_Alto_CA`, `Yale_St_Palo_Alto_CA`, `Belmont_Office_Park_Belmont_CA` | `TUM-AVS/BayArea_carla0916` |
+| Map family | Maps | CARLA 0.9.16 server: private Hugging Face dataset repo | or the TUM AVS lab NAS (`AVS-Share`) |
+|---|---|---|---|
+| Munich | `Munich_Route_1` | `Yuan-avs/Munich_Route_1_carla0916` | `Yuan/Mifcom2/Maps/Munich/` |
+| Bay Area | `Page_Mill_Rd_Palo_Alto_CA`, `Yale_St_Palo_Alto_CA`, `Belmont_Office_Park_Belmont_CA` | `TUM-AVS/BayArea_carla0916` | `Yuan/Mifcom2/Maps/California/` |
+
+The scenario files are private too: Hugging Face `<scenario dataset>`, or the
+`openscenario/` folders of the sets on the NAS ([docs/setup.md](docs/setup.md#4-the-scenario-files)).
 
 ## Quick start
 
@@ -23,6 +26,7 @@ pip install -U pip "huggingface_hub>=0.34" && hf auth login
 
 # 1. a CARLA server with the maps (private repo: ask for access); it keeps running in tmux
 python scripts/download_server.py bayarea --dest ~/carla_servers
+#    (or from the NAS, no login: add --archive /mnt/avs-share/Yuan/Mifcom2/Maps/California/BayArea_carla0916_server_v1.tar.gz)
 tmux new -d -s carla scripts/start_carla.sh ~/carla_servers/BayArea_carla0916_server_v1 4100
 #    server log: tmux attach -t carla (detach: Ctrl-b d)
 
@@ -47,7 +51,9 @@ The output is in `runs/scenario_00_ego_5105/`:
 - `front.mp4` and `front_edge.mp4`, and the same for all 8 views;
 - `run.json`: completion, spawn check, colours, weather, pose audit, frames per view.
 
-`run_osc.py` exits with 0 only when the run completed with every agent and every frame.
+`run_osc.py` exits with 0 only when every check in `run.json` passes: every agent spawned and was
+in every frame until its removal, every pose within 5 cm of the file, every frame 0.1 s after the
+previous one, and all 16 videos complete.
 
 To compare a run with the original munich2drive clip:
 
@@ -65,10 +71,11 @@ traffic drifts off them.
 
 `run_osc.py` runs ScenarioRunner unmodified and patches it in-process:
 
-- **weather:** the scenario's exact CARLA weather, before the actors spawn;
+- **weather:** the scenario's exact CARLA weather, before the traffic spawns;
 - **time:** absolute time conditions, so agents are removed on time;
 - **spawning:** recovers agents CARLA refuses to spawn, and those beyond the physics bound;
-- **route planner:** a fix for a loop on the Belmont map;
+- **route planner:** a cap on CARLA's route planner, which never finishes on the Belmont map (a
+  replay does not use the planner);
 - **ticks:** one synchronous pose batch per tick, and every camera frame waited for.
 
 See [docs/recording.md](docs/recording.md), which also covers driving the ego with your own stack.

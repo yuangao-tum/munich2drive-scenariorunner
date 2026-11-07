@@ -16,9 +16,11 @@ ScenarioRunner itself is not modified; this script patches it in-process:
                spawned again with more lift, then high in the air. An agent beyond UE4's 10.48 km
                physics bound (Munich's east end) is spawned inside it and moved out, or CARLA
                reports a 0 x 0 x 0 bounding box for it.
-  4. planner   ScenarioRunner builds CARLA's GlobalRoutePlanner for every map. On Belmont, 3 road
-               segments (road 137, lane 2) never reach their end by `next()` and the planner's
-               loop grows until the process is killed; every segment's walk is capped here.
+  4. planner   ScenarioRunner builds CARLA's GlobalRoutePlanner for every map (twice per run). On
+               Belmont, 3 road segments (road 137, lane 2) never reach their end by `next()` and the
+               planner's loop grows until the process is killed; every segment's walk is capped
+               here. The cap also cuts 3 Munich_Route_1 segments short. A replay does not use the
+               planner: ScenarioRunner follows a trajectory's vertices as a "shortest" route.
   5. ticks     Every actor's pose comes from osc_replay_control's placement (the controller the
                files assign, shipped in osc/): before each world tick all poses for that tick go
                out in ONE synchronous batch (a controller's own set_transform is asynchronous and
@@ -29,7 +31,10 @@ ScenarioRunner itself is not modified; this script patches it in-process:
                <view>_edge.mp4), and audits every actor against the file.
 ScenarioRunner runs with --sync --frameRate 10: one tick per scenario step, 200 frames.
 Output: <out>/<clip>/{<view>.mp4, <view>_edge.mp4, run.json, scenario_runner.log}.
-Exit status 0 only when the run completed with every agent and every frame.
+Exit status 0 only when every check in run.json "checks" passes: the run completed; every agent
+spawned and was in every frame until its removal, and none after it; every pose within
+--pose-tolerance of the file; every frame one step after the previous one; every view complete;
+the lamp heads switched (--lamp-bridge).
 """
 from __future__ import annotations
 
@@ -153,7 +158,11 @@ class Rig:
         synchronous mode a later frame cannot exist yet, so a missing image is an error."""
         for v, q in self.queues.items():
             while True:
-                img = q.get(timeout=timeout)
+                try:
+                    img = q.get(timeout=timeout)
+                except queue.Empty:
+                    raise RuntimeError(f"camera {v}: no image of frame {frame} within "
+                                       f"{timeout:.0f} s") from None
                 if img.frame == frame:
                     self.writers[v].put(img.raw_data)
                     break
@@ -186,6 +195,8 @@ class Audit:
         self.per_frame: list = []
         self.n = 0
         self.ghosts = 0
+        self.missing = 0              # actor-frames in which an actor should be there and is not
+        self.missing_first: dict = {}
         self.max_dz = 0.0
 
     def frame(self, snapshot, k: int, ids: dict, boxes: dict, tracks: dict, pose_at) -> None:
@@ -193,8 +204,13 @@ class Audit:
         fmax = 0.0
         for role, aid in ids.items():
             traj = self.trajs.get(role)
+            if traj is None:                           # not replayed (an ego you drive)
+                continue
             s = snapshot.find(aid)
-            if traj is None or s is None:
+            if s is None:
+                if traj["gone"] is None or t <= traj["gone"]:
+                    self.missing += 1
+                    self.missing_first.setdefault(role, k)
                 continue
             tf = s.get_transform()
             if traj["gone"] is not None and t > traj["gone"]:
@@ -225,6 +241,9 @@ class Audit:
                 "max_dz_m": round(self.max_dz, 4),
                 "worst": [{"actor": r, "dev_m": round(d, 4), "frame": k} for r, (d, k) in top],
                 "frames_over_5cm": [(k, d) for k, d in self.per_frame if d > 0.05][:30],
+                # actor-frames: an actor absent from a frame before its removal / visible after it
+                "missing_actor_frames": self.missing,
+                "missing_first_frame": dict(sorted(self.missing_first.items())[:10]),
                 "in_view_after_delete": self.ghosts}
 
 
@@ -255,6 +274,8 @@ def main():
     ap.add_argument("--edge-high", type=float, default=0.25)
     ap.add_argument("--crf", type=int, default=18)
     ap.add_argument("--timeout", type=float, default=300.0)
+    ap.add_argument("--pose-tolerance", type=float, default=0.05,
+                    help="largest allowed distance (m) between an actor and the file, for ok")
     args = ap.parse_args()
 
     if args.tm_port is None:
@@ -294,14 +315,20 @@ def main():
     orc.EXTERNAL_PLACEMENT = True            # every pose comes from the batch below
 
     trajs = orc.read_file(str(xosc))
-    horizon = max((len(tr["t"]) for tr in trajs.values()), default=0)
+    step = X["params"].get("StepSeconds")
+    if step is not None and abs(float(step) - DT) > 1e-9:
+        sys.exit(f"{xosc.name}: StepSeconds = {step}; run_osc.py replays 0.1 s steps only")
+    # the file's own length (HorizonSteps), else the last vertex time
+    horizon = int(float(X["params"].get("HorizonSteps") or 0))
+    if horizon <= 0:
+        horizon = max((int(round(tr["t"][-1] / DT)) + 1 for tr in trajs.values()), default=0)
     exact_weather = {k[len("Carla_"):]: float(v) for k, v in X["params"].items()
                      if k.startswith("Carla_")}
     STATE: dict = {"spawn": {"stock_refused": [], "respawned": {}, "lost": [],
                              "beyond_bound": []},
                    "weather": exact_weather or None, "lamps": None, "frames": 0, "colors": {},
-                   "planner_capped": 0, "capture_error": None, "sr_returned": False,
-                   "batch_errors": 0, "views": None}
+                   "planner_capped": set(), "capture_error": None, "sr_returned": False,
+                   "batch_errors": 0, "views": None, "frame_errors": [], "n_frame_errors": 0}
     holder: dict = {"rig": None, "ids": {}, "boxes": {}, "tracks": {}, "k": 0, "tree": None}
     audit = Audit(trajs, DT)
 
@@ -407,7 +434,7 @@ def main():
                 while w.transform.location.distance(endloc) > res:
                     seg["path"].append(w)
                     if len(seg["path"]) > cap:      # never reaches its end: keep what we have
-                        STATE["planner_capped"] += 1
+                        STATE["planner_capped"].add((x1, y1, z1, x2, y2, z2))
                         break
                     nxt = w.next(res)
                     if not nxt:
@@ -441,8 +468,22 @@ def main():
     def capture(world, frame) -> None:
         if holder["rig"] is not None:
             holder["rig"].collect(frame)
-        audit.frame(world.get_snapshot(), holder["k"], holder["ids"], holder["boxes"],
-                    holder["tracks"], orc.pose_at)
+        snap = world.get_snapshot()
+        k = holder["k"]
+        if k == 0:
+            holder["t0"] = snap.timestamp.elapsed_seconds
+        elif (frame != holder["last_frame"] + 1 or snap.frame != frame
+              or abs(snap.timestamp.elapsed_seconds - holder["t0"] - k * DT) > 1e-3):
+            # another client ticked this server, or the step is not 0.1 s: frame k would not
+            # show time k * 0.1 s
+            STATE["n_frame_errors"] += 1
+            if len(STATE["frame_errors"]) < 10:
+                STATE["frame_errors"].append(
+                    {"index": k, "frame": frame, "expected_frame": holder["last_frame"] + 1,
+                     "snapshot_frame": snap.frame,
+                     "t_s": round(snap.timestamp.elapsed_seconds - holder["t0"], 4)})
+        holder["last_frame"] = frame
+        audit.frame(snap, k, holder["ids"], holder["boxes"], holder["tracks"], orc.pose_at)
         holder["k"] += 1
         STATE["frames"] = holder["k"]
         if holder["k"] % 50 == 0:
@@ -474,7 +515,8 @@ def main():
                 flush_poses(0.0)
             hero = next((a for a in actors if a.attributes.get("role_name") == "hero"), None)
             if rig_spec is not None and hero is None:     # a base scenario: nobody to film from
-                STATE["cameras"] = "skipped: the scenario has no hero"
+                STATE["cameras"] = ("skipped: the hero was not spawned" if "hero" in X["entities"]
+                                    else "skipped: the scenario has no hero")
             if rig_spec is not None and hero is not None:
                 holder["rig"] = Rig(carla, world, hero, rig_spec, views, out_dir,
                                     int(rig_spec.get("fps", 10)), args.edge_low,
@@ -555,9 +597,24 @@ def main():
         for v in STATE["views"].values()))
     completed = (STATE["sr_returned"] and STATE["capture_error"] is None
                  and STATE["frames"] >= horizon > 0)
-    ok = completed and not STATE["spawn"]["lost"] and bool(views_ok)
+    pa = audit.report()
+    missing_entities = sorted(set(X["entities"]) - set(holder["ids"]))
+    checks = {
+        "completed": bool(completed),
+        "views_complete": bool(views_ok),
+        "every_agent_spawned": not STATE["spawn"]["lost"] and not missing_entities,
+        "every_actor_in_every_frame": audit.missing == 0,
+        "removed_on_time": audit.ghosts == 0,
+        "poses_within_tolerance": ((pa["max_m"] or 0.0) <= args.pose_tolerance
+                                   and pa["max_dz_m"] <= args.pose_tolerance),
+        "pose_batches_applied": STATE["batch_errors"] == 0,
+        "frames_in_step": STATE["n_frame_errors"] == 0,
+        "lamps_switched": STATE["lamps"] is None or bool(STATE["lamps"].get("ok")),
+    }
+    ok = all(checks.values())
     report = {
         "xosc": str(xosc), "clip": clip, "map": X["map"], "ok": ok,
+        "failed_checks": [c for c, v in checks.items() if not v], "checks": checks,
         # ScenarioRunner prints "Not all scenario tests were successful" for any scenario
         # without test criteria (these have none): completion is the frame count instead
         "completed": completed, "sr_returned": STATE["sr_returned"], "sr_main_rc": rc,
@@ -570,16 +627,17 @@ def main():
                   "respawned": STATE["spawn"]["respawned"],
                   "beyond_physics_bound": STATE["spawn"]["beyond_bound"],
                   "lost": STATE["spawn"]["lost"]},
-        "missing_entities": sorted(set(X["entities"]) - set(holder["ids"]))[:20],
+        "missing_entities": missing_entities[:20],
         "colors_as_file": (sum(STATE["colors"].values()), len(STATE["colors"])),
         "weather": STATE["weather"], "lamps": STATE["lamps"],
         "pose_batch_errors": STATE["batch_errors"],
-        "planner_segments_capped": STATE["planner_capped"],
-        "pose_audit": audit.report(), "views": STATE["views"], "cameras": STATE.get("cameras"),
+        "frame_errors": STATE["n_frame_errors"], "frame_error_examples": STATE["frame_errors"],
+        "planner_segments_capped": len(STATE["planner_capped"]),
+        "pose_audit": pa, "views": STATE["views"], "cameras": STATE.get("cameras"),
         "sr_warnings": [ln for ln in text.splitlines() if "WARNING" in ln][:30],
     }
     (out_dir / "run.json").write_text(json.dumps(report, indent=1))
-    print(json.dumps({k: report[k] for k in ("clip", "ok", "completed", "wall_s",
+    print(json.dumps({k: report[k] for k in ("clip", "ok", "failed_checks", "completed", "wall_s",
                                              "frames_captured", "entities_in_file",
                                              "actors_in_run", "spawn", "colors_as_file",
                                              "pose_audit")}, indent=1))

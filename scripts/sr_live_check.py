@@ -52,9 +52,9 @@ def trajectories(xosc: Path) -> dict:
 def at(traj, t):
     times, pts = traj
     if t <= times[0]:
-        return pts[0]
+        return pts[0][:2]
     if t >= times[-1]:
-        return pts[-1]
+        return pts[-1][:2]
     i = bisect.bisect_right(times, t) - 1
     w = (t - times[i]) / (times[i + 1] - times[i])
     a, b = pts[i], pts[i + 1]
@@ -105,6 +105,8 @@ def main():
     ap.add_argument("--xosc", type=Path, required=True)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=2000)
+    ap.add_argument("--tm-port", type=int, default=None,
+                    help="Traffic Manager port (default: --port + 4000, as run_osc.py)")
     ap.add_argument("--sr", type=Path, default=Path(os.environ.get(
         "SCENARIO_RUNNER_ROOT", "~/scenario_runner")).expanduser())
     ap.add_argument("--sr-python", default=sys.executable)
@@ -114,6 +116,8 @@ def main():
              "default $CARLA_ROOT/PythonAPI/carla")
     ap.add_argument("--extra", default="", help="more scenario_runner.py arguments")
     args = ap.parse_args()
+    if args.tm_port is None:
+        args.tm_port = args.port + 4000
 
     trajs, names = trajectories(args.xosc)
     client = carla.Client(args.host, args.port)
@@ -124,7 +128,7 @@ def main():
     cmd = [args.sr_python, str(args.sr / "scenario_runner.py"), "--openscenario",
            str(args.xosc.resolve()), "--sync", "--frameRate", "10", "--timeout", "300",
            "--host", args.host,
-           "--port", str(args.port)] + args.extra.split()
+           "--port", str(args.port), "--trafficManagerPort", str(args.tm_port)] + args.extra.split()
     t_wall = time.time()
     env = dict(os.environ, PYTHONUNBUFFERED="1")
     if args.carla_pythonapi:

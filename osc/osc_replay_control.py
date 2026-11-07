@@ -95,11 +95,22 @@ def scenario_file(named=None):
 
 def read_file(path):
     """{entity: {"t": [s], "pts": [(x, y, z, yaw_deg)] CARLA frame, "gone": s or None}} for every
-    FollowTrajectoryAction (y and heading negated, as ScenarioRunner converts a WorldPosition)
-    and the entity's DeleteEntityAction time."""
+    entity of a ManeuverGroup: its FollowTrajectoryAction (y and heading negated, as
+    ScenarioRunner converts a WorldPosition) and its DeleteEntityAction time. An entity with a
+    single state has no FollowTrajectoryAction: its Init pose is its only vertex, at t = 0. An
+    entity without a ManeuverGroup (an ego you drive yourself) is not replayed."""
     if path not in _FILES:
         out = {}
-        for mg in ET.parse(path).getroot().iter("ManeuverGroup"):
+        root = ET.parse(path).getroot()
+        init = {}
+        acts = root.find("Storyboard/Init/Actions")
+        for pr in (acts.iter("Private") if acts is not None else ()):
+            wp = pr.find(".//TeleportAction/Position/WorldPosition")
+            if wp is not None:
+                init[pr.get("entityRef")] = (float(wp.get("x")), -float(wp.get("y")),
+                                             float(wp.get("z", 0.0)),
+                                             -math.degrees(float(wp.get("h", 0.0))))
+        for mg in root.iter("ManeuverGroup"):
             ref = mg.find("Actors/EntityRef")
             if ref is None:
                 continue
@@ -116,6 +127,8 @@ def read_file(path):
                     c = ev.find(".//SimulationTimeCondition")
                     if c is not None:
                         gone = float(c.get("value"))
+            if not ts and ref.get("entityRef") in init:   # a single state, at t = 0
+                ts, pts = [0.0], [init[ref.get("entityRef")]]
             if ts:
                 out[ref.get("entityRef")] = {"t": ts, "pts": pts, "gone": gone}
         _FILES[path] = out

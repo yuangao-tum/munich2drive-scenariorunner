@@ -32,16 +32,23 @@ cannot be imported next to it.
 ## 1. A CARLA server with the maps
 
 The maps are not part of stock CARLA. Each map family ships as a complete, packaged CARLA 0.9.16
-server in a **private** Hugging Face dataset repo; ask the owner for access.
+server, in a **private** Hugging Face dataset repo and on the TUM AVS lab NAS (share `AVS-Share`);
+ask the owner for access.
 
-| Map family | Hugging Face repo | Archive | Unpacked |
-|---|---|---|---|
-| Munich Route_1 | `Yuan-avs/Munich_Route_1_carla0916` | `Munich_Route_1_carla0916_server_v5.tar.gz` (15.8 GB) | ~39 GB |
-| Bay Area (Page Mill, Yale, Belmont) | `TUM-AVS/BayArea_carla0916` | `BayArea_carla0916_server_v1.tar.gz` (20.0 GB) | ~51 GB |
+| Map family | Hugging Face repo | Lab NAS (`AVS-Share`) | Archive | Unpacked |
+|---|---|---|---|---|
+| Munich Route_1 | `Yuan-avs/Munich_Route_1_carla0916` | `Yuan/Mifcom2/Maps/Munich/` | `Munich_Route_1_carla0916_server_v5.tar.gz` (15.8 GB) | ~39 GB |
+| Bay Area (Page Mill, Yale, Belmont) | `TUM-AVS/BayArea_carla0916` | `Yuan/Mifcom2/Maps/California/` | `BayArea_carla0916_server_v1.tar.gz` (20.0 GB) | ~51 GB |
 
 ```bash
 python scripts/download_server.py munich  --dest ~/carla_servers
 python scripts/download_server.py bayarea --dest ~/carla_servers
+
+# or from the NAS (no Hugging Face login needed), with the share mounted at /mnt/avs-share:
+python scripts/download_server.py munich --dest ~/carla_servers \
+    --archive /mnt/avs-share/Yuan/Mifcom2/Maps/Munich/Munich_Route_1_carla0916_server_v5.tar.gz
+python scripts/download_server.py bayarea --dest ~/carla_servers \
+    --archive /mnt/avs-share/Yuan/Mifcom2/Maps/California/BayArea_carla0916_server_v1.tar.gz
 ```
 
 The script needs the archive and the unpacked tree on disk at the same time: about 57 GB free for
@@ -54,9 +61,10 @@ Munich and 74 GB for the Bay Area. It does the following:
 - deletes the archive afterwards (`--keep-archive` keeps it);
 - for Munich, also fetches `german_light_heads.json` into the server folder.
 
-`--archive PATH` uses an archive you already have, with the same SHA-256 check. For the Bay Area the
-script tries `TUM-AVS/BayArea_carla0916` first and falls back to `Yuan-avs/BayArea_carla0916`, the
-original copy.
+`--archive PATH` uses an archive you already have and needs no login: it is checked against the
+archive's known SHA-256, never deleted, and for Munich `german_light_heads.json` is taken from the
+archive's folder (the NAS folder has it). For the Bay Area the download tries
+`TUM-AVS/BayArea_carla0916` first and falls back to `Yuan-avs/BayArea_carla0916`, the original copy.
 
 Use each server only for its own maps. The Bay Area server is a separate build: 81 asset paths it
 contains collide with Munich content, so never load Munich on it, or the reverse.
@@ -114,11 +122,20 @@ or `CARLA_ROOT=~/carla_servers/<server folder>` work as well.
 ## 4. The scenario files
 
 The OpenSCENARIO sets are in the private Hugging Face dataset repo
-`<scenario dataset>`, one folder per map; see munich2drive-openscenario. For example:
+`<scenario dataset>`, one folder per map, and on the lab NAS (`AVS-Share`) in the
+`openscenario/` folder of each set:
+
+| Set | Lab NAS (`AVS-Share`) |
+|---|---|
+| Munich_Route_1 | `Yuan/Mifcom2/Dataset/munich2drive_route1_odd/openscenario/` |
+| Page_Mill_Rd_Palo_Alto_CA | `Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_pagemill/openscenario/` |
+| Yale_St_Palo_Alto_CA | `Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_yale/openscenario/` |
+| Belmont_Office_Park_Belmont_CA | `Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_belmont/openscenario/` |
 
 ```bash
 hf download <scenario dataset> --repo-type dataset \
     --include "Yale_St_Palo_Alto_CA/*" --local-dir ~/m2d_osc
+# or: cp -r /mnt/avs-share/Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_yale/openscenario ~/m2d_osc/Yale_St_Palo_Alto_CA
 ```
 
 Keep each set's folder as it is: `osc_replay_control.py` must stay next to the `.xosc` files.

@@ -3,10 +3,10 @@
 | | |
 |---|---|
 | CARLA maps | `Page_Mill_Rd_Palo_Alto_CA` (63 km of road, 70 signals), `Yale_St_Palo_Alto_CA` (14 km, 46 signals), `Belmont_Office_Park_Belmont_CA` (13 km, no signals). RoadRunner exports, OpenDRIVE 1.4 with a tmerc `geoReference` |
-| Server | CARLA 0.9.16 server **v1**: Hugging Face `TUM-AVS/BayArea_carla0916` (private), `BayArea_carla0916_server_v1.tar.gz` |
+| Server | CARLA 0.9.16 server **v1**, `BayArea_carla0916_server_v1.tar.gz`: Hugging Face `TUM-AVS/BayArea_carla0916` (private), or the lab NAS (`AVS-Share`) `Yuan/Mifcom2/Maps/California/` |
 | Scenarios | 75 (Page Mill) + 63 (Yale) + 63 (Belmont) scenarios, 20 s at 10 Hz |
 | Variants | 657 + 205 + 233 = 1,095 ego variants (EDGAR as the ego) |
-| Scenario files | folders `Page_Mill_Rd_Palo_Alto_CA/`, `Yale_St_Palo_Alto_CA/`, `Belmont_Office_Park_Belmont_CA/` of the private Hugging Face dataset repo `<scenario dataset>` (see munich2drive-openscenario) |
+| Scenario files | folders `Page_Mill_Rd_Palo_Alto_CA/`, `Yale_St_Palo_Alto_CA/`, `Belmont_Office_Park_Belmont_CA/` of the private Hugging Face dataset repo `<scenario dataset>`, or the lab NAS `Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_<pagemill, yale, belmont>/openscenario/` |
 
 ## Install and start
 
