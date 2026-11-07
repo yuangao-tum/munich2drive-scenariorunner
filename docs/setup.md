@@ -121,7 +121,8 @@ or `CARLA_ROOT=~/carla_servers/<server folder>` work as well.
 
 ## 4. The scenario files
 
-The OpenSCENARIO sets are in the private Hugging Face dataset repo
+Seven scenarios to try are in [samples/](../samples/) (no download needed). The full OpenSCENARIO
+sets are in the private Hugging Face dataset repo
 `<scenario dataset>`, one folder per map, and on the lab NAS (`AVS-Share`) in the
 `openscenario/` folder of each set:
 

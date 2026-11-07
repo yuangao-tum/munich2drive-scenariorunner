@@ -38,13 +38,14 @@ git clone --depth 1 --filter=blob:none --sparse --branch 0.9.16 \
     https://github.com/carla-simulator/carla.git ~/carla-0.9.16-src
 git -C ~/carla-0.9.16-src sparse-checkout set PythonAPI/carla/agents
 
-# 3. scenario files (private dataset), then one run: 8 camera views + 8 edge views, 200 frames each
-hf download <scenario dataset> --repo-type dataset \
-    --include "Page_Mill_Rd_Palo_Alto_CA/*" --local-dir ~/m2d_osc
-python scripts/run_osc.py ~/m2d_osc/Page_Mill_Rd_Palo_Alto_CA/variants/scenario_00_ego_5105.xosc \
+# 3. one run on a sample scenario (samples/): 8 camera views + 8 edge views, 200 frames each
+python scripts/run_osc.py samples/Page_Mill_Rd_Palo_Alto_CA/scenario_00_ego_5105.xosc \
     --port 4100 --out runs/ --sr-root ~/scenario_runner \
     --carla-pythonapi ~/carla-0.9.16-src/PythonAPI/carla
 ```
+
+[samples/](samples/) holds seven scenarios to try, on all four maps: the scenarios of the test
+report. The full sets are in the private dataset (see [docs/setup.md](docs/setup.md#4-the-scenario-files)).
 
 The output is in `runs/scenario_00_ego_5105/`:
 
@@ -89,6 +90,7 @@ of the 6 test variants.
 - [docs/munich.md](docs/munich.md), [docs/bayarea.md](docs/bayarea.md): running on each map family
 - [docs/recording.md](docs/recording.md): cameras, edge views, outputs, plain ScenarioRunner, comparison
 - [docs/test-report.md](docs/test-report.md): the test on both map families (6 variants, 1 base scenario)
+- [samples/README.md](samples/README.md): the seven sample scenarios
 
 ## Layout
 
@@ -101,4 +103,5 @@ scripts/report_runs.py       markdown table of several runs
 scripts/sr_live_check.py     plain ScenarioRunner run, audited from a second client
 osc/osc_replay_control.py    the ScenarioRunner controller the scenario files assign
 rigs/edgar_rig.json          the EDGAR camera rig of the munich2drive clips
+samples/                     seven sample scenarios (the test report's), one folder per map
 ```
