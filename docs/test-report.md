@@ -85,7 +85,7 @@ Both are why the repository runs ScenarioRunner through `run_osc.py`.
 
 | Issue | Effect before the fix |
 |---|---|
-| ScenarioRunner ignores a storyboard `StopTrigger` that is not a criterion | a run continued after its 20 s until ScenarioRunner's 60 s timeout |
+| ScenarioRunner ignores a storyboard `StopTrigger` that is not a criterion | a run did not end at 20 s, only once every agent's controller reported its goal; when one never did, the run went on until the test's 30-minute limit (ScenarioRunner's own timeout for OpenSCENARIO files is 100,000 s) |
 | ScenarioRunner starts a `SimulationTimeCondition`'s clock when its event starts | removed agents stayed visible 0.2 s too long |
 | CARLA's route planner loops on 3 Belmont road segments | ScenarioRunner was killed on every Belmont file |
 | a controller's `set_transform` is asynchronous | once in ~37,000 actor-frames a car showed its previous position (0.8 m) |
@@ -93,8 +93,10 @@ Both are why the repository runs ScenarioRunner through `run_osc.py`.
 | the ego's height and pitch were taken at the footprint centre | camera heights up to 14 cm off on slopes |
 | traffic models were placed by box centre, not origin | ambulances and tourismo buses 0.2–0.3 m off the clip |
 
-The last four fixes raised the comparison with the clips. "Before" is the first runner version,
-"after" the final one; same scenarios, same servers:
+The last three fixes raised the comparison with the clips. "Before" is the runner of the second
+test round, which already had the synchronous pose batch and the route-planner fix (the first
+round gave nearly the same values and no Belmont result); "after" is the final runner; same
+scenarios, same servers:
 
 | Scenario | PSNR / SSIM before | after |
 |---|---|---|

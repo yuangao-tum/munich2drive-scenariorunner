@@ -15,14 +15,16 @@ them.
 ## Quick start
 
 ```bash
-# 0. environment: Python 3.10 or 3.11 (details: docs/setup.md)
-sudo apt install ffmpeg git libvulkan1
+# 0. environment: Python 3.10 or 3.11 (details, and Ubuntu 24.04: docs/setup.md)
+sudo apt install ffmpeg git libvulkan1 tmux
+sudo apt install python3.10-venv          # Ubuntu 22.04; on 24.04 get Python 3.10 first (docs/setup.md)
 python3.10 -m venv ~/m2d-sr && . ~/m2d-sr/bin/activate
-pip install -U pip "huggingface_hub>=0.25" && hf auth login
+pip install -U pip "huggingface_hub>=0.34" && hf auth login
 
-# 1. a CARLA server with the maps (private repo: ask for access)
+# 1. a CARLA server with the maps (private repo: ask for access); it keeps running in tmux
 python scripts/download_server.py bayarea --dest ~/carla_servers
-scripts/start_carla.sh ~/carla_servers/BayArea_carla0916_server_v1 4100        # keep running
+tmux new -d -s carla scripts/start_carla.sh ~/carla_servers/BayArea_carla0916_server_v1 4100
+#    server log: tmux attach -t carla (detach: Ctrl-b d)
 
 # 2. ScenarioRunner 0.9.16 and its Python packages
 git clone --branch v0.9.16 https://github.com/carla-simulator/scenario_runner.git ~/scenario_runner

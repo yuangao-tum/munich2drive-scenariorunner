@@ -5,19 +5,23 @@ attached; two servers fit on a 24 GB card.
 
 ## 0. Environment
 
-```bash
-sudo apt install ffmpeg git libvulkan1           # ffmpeg with libx264; CARLA renders through Vulkan
-python3.10 -m venv ~/m2d-sr && . ~/m2d-sr/bin/activate
-pip install -U pip "huggingface_hub>=0.25"
-hf auth login                                    # or: export HF_TOKEN=...
-```
-
 **Python 3.10 or 3.11.** ScenarioRunner 0.9.16 pins numpy 1.24.4, which has no wheel for 3.12.
 
-- **Ubuntu 22.04:** `sudo apt install python3.10-venv`.
-- **Ubuntu 24.04 and later:** these ship only 3.12; get 3.10 from the deadsnakes PPA
-  (`sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt install python3.10 python3.10-venv`),
-  from conda, or with `uv venv --python 3.10`.
+- **Ubuntu 22.04:** Python 3.10 is the system Python; its venv module is the package
+  `python3.10-venv`.
+- **Ubuntu 24.04 and later:** these ship only 3.12. Get 3.10 from the deadsnakes PPA
+  (`sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt install python3.10 python3.10-venv`)
+  or from conda, or let uv fetch it: replace the `python3.10 -m venv` line below with
+  `uv venv --seed --python 3.10 ~/m2d-sr && . ~/m2d-sr/bin/activate` (`--seed` puts pip into the
+  environment, which the `pip install` lines need).
+
+```bash
+sudo apt install ffmpeg git libvulkan1 tmux      # ffmpeg with libx264; CARLA renders through Vulkan
+sudo apt install python3.10-venv                 # Ubuntu 22.04 (24.04: see above)
+python3.10 -m venv ~/m2d-sr && . ~/m2d-sr/bin/activate
+pip install -U pip "huggingface_hub>=0.34"
+hf auth login                                    # or: export HF_TOKEN=...
+```
 
 **Driver.** The NVIDIA driver must support Vulkan; `vulkaninfo` (package `vulkan-tools`) checks it.
 
@@ -57,19 +61,23 @@ original copy.
 Use each server only for its own maps. The Bay Area server is a separate build: 81 asset paths it
 contains collide with Munich content, so never load Munich on it, or the reverse.
 
-Start a server and keep it running in tmux or screen:
+Start one of them from this repository's folder. `start_carla.sh` stays in the foreground until
+the server exits, so run it in tmux (or screen); `tmux attach -t carla` shows its output, and
+Ctrl-b d leaves it running:
 
 ```bash
-scripts/start_carla.sh ~/carla_servers/Munich_Route_1_carla0916_server_v5 4100
-scripts/start_carla.sh ~/carla_servers/BayArea_carla0916_server_v1        4100
+tmux new -d -s carla scripts/start_carla.sh ~/carla_servers/Munich_Route_1_carla0916_server_v5 4100
+# or
+tmux new -d -s carla scripts/start_carla.sh ~/carla_servers/BayArea_carla0916_server_v1 4100
 ```
 
 It uses the flags of the munich2drive clips: `-RenderOffScreen -quality-level=Epic -nosound`, RPC
 port 4100. The server also uses 4101 and 4102. For a second server on the same machine, start it on
 another port (e.g. 4110), and run `run_osc.py --port 4110` against it. The Traffic Manager port
-defaults to the server port + 4000, so the two runs do not collide. On a machine with several GPUs set `CARLA_GPU=<index>`. On the Munich server the
-script also switches on the control of the map's German traffic-light lamp heads, and prints the two
-`run_osc.py` arguments that use it.
+defaults to the server port + 4000, so the two runs do not collide. On a machine with several GPUs
+set `CARLA_GPU=<index>` (through tmux: `tmux new -d -s carla -e CARLA_GPU=<index> scripts/start_carla.sh ...`,
+since a running tmux server does not pass on the caller's variables). On the Munich server the script also switches on the control of the map's
+German traffic-light lamp heads, and prints the two `run_osc.py` arguments that use it.
 
 ## 2. ScenarioRunner 0.9.16
 

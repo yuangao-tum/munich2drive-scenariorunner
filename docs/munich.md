@@ -41,6 +41,6 @@ python scripts/run_osc.py ~/m2d_osc/Munich_Route_1/variants/scenario_00_ego_6938
   dark before t = 0, as in the clips. In the clips, the heads at signalised junctions then
   followed the signal plan; the re-runs leave them dark.
 - **Vehicles:** the European CARLA fleet, and Munich buses `vehicle.generic.citaro_12m` and
-  `vehicle.generic.tourismo_12m`, which only server v5 has.
+  `vehicle.generic.tourismo_12m`, which stock CARLA does not have (both munich2drive servers do).
 - **Elevation:** the corridor lies at ~500–530 m with stacked roads; z in the files is the road
   surface (deck resolved).
