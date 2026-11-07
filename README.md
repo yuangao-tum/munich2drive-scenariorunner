@@ -7,6 +7,11 @@ The input is a set of munich2drive OpenSCENARIO files (Munich and Bay Area maps,
 ego variants), which are distributed separately (see below). This repository only runs and renders
 them.
 
+![The eight camera views of one frame](docs/media/views_munich_7937.jpg)
+![The edge view of each camera](docs/media/views_munich_7937_edge.jpg)
+*One frame (t = 4 s) of [`samples/Munich_Route_1/scenario_02_ego_7937.xosc`](samples/): EDGAR's six
+cameras plus the `bird` and `chase` views, and below them the edge view of each.*
+
 | Map family | Maps | CARLA 0.9.16 server: private Hugging Face dataset repo | or the TUM AVS lab NAS (`AVS-Share`) |
 |---|---|---|---|
 | Munich | `Munich_Route_1` | `Yuan-avs/Munich_Route_1_carla0916` | `Yuan/Mifcom2/Maps/Munich/` |
@@ -14,6 +19,10 @@ them.
 
 The scenario files are private too: Hugging Face `<scenario dataset>`, or the
 `openscenario/` folders of the sets on the NAS ([docs/setup.md](docs/setup.md#4-the-scenario-files)).
+
+![The front camera on the four maps, with its edge view](docs/media/maps_front_edge.jpg)
+*The front camera on each map, with its edge view below: Munich_Route_1, Page Mill Rd, Yale St and
+Belmont, all from [samples/](samples/).*
 
 ## Quick start
 
