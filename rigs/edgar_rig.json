@@ -1,0 +1,163 @@
+{
+ "name": "EDGAR surround rig of the munich2drive camera clips",
+ "attach_to_blueprint": "vehicle.lincoln.mkz_2017",
+ "frame": "CARLA actor frame of the ego (origin = EDGAR's rear axle; x forward, y right, z up)",
+ "fps": 10,
+ "gamma": 2.2,
+ "notes": [
+  "The six surround views are EDGAR's real cameras (pose from edgar.urdf, intrinsics from the recorded camera_info): each is rendered at render_width x render_height with render_fov and roll, then cut to image_width x image_height at crop [x0, y0, w, h], which reproduces the principal-point offset.",
+  "bird and chase are visualisation views derived from EDGAR's bounding box."
+ ],
+ "views": {
+  "front": {
+   "x": 2.34,
+   "y": -0.001,
+   "z": 2.085,
+   "pitch": -0.8,
+   "yaw": -0.3,
+   "roll": -0.23,
+   "render_width": 988,
+   "render_height": 610,
+   "render_fov": 86.146,
+   "crop": [
+    0,
+    0,
+    960,
+    600
+   ],
+   "image_width": 960,
+   "image_height": 600,
+   "focal_px": 528.4
+  },
+  "front_left": {
+   "x": 1.917,
+   "y": -0.661,
+   "z": 2.13,
+   "pitch": -21.6,
+   "yaw": -70.8,
+   "roll": 4.53,
+   "render_width": 972,
+   "render_height": 610,
+   "render_fov": 86.03,
+   "crop": [
+    0,
+    0,
+    960,
+    600
+   ],
+   "image_width": 960,
+   "image_height": 600,
+   "focal_px": 520.9
+  },
+  "front_right": {
+   "x": 1.852,
+   "y": 0.657,
+   "z": 2.042,
+   "pitch": -19.0,
+   "yaw": 76.8,
+   "roll": -5.96,
+   "render_width": 974,
+   "render_height": 602,
+   "render_fov": 85.721,
+   "crop": [
+    14,
+    2,
+    960,
+    600
+   ],
+   "image_width": 960,
+   "image_height": 600,
+   "focal_px": 524.8
+  },
+  "back": {
+   "x": -0.468,
+   "y": 0.078,
+   "z": 2.258,
+   "pitch": -0.8,
+   "yaw": -179.7,
+   "roll": -0.68,
+   "render_width": 966,
+   "render_height": 618,
+   "render_fov": 100.81,
+   "crop": [
+    6,
+    18,
+    960,
+    600
+   ],
+   "image_width": 960,
+   "image_height": 600,
+   "focal_px": 399.5
+  },
+  "back_left": {
+   "x": -0.037,
+   "y": -0.505,
+   "z": 2.269,
+   "pitch": -16.8,
+   "yaw": -108.2,
+   "roll": -0.48,
+   "render_width": 980,
+   "render_height": 626,
+   "render_fov": 101.311,
+   "crop": [
+    20,
+    0,
+    960,
+    600
+   ],
+   "image_width": 960,
+   "image_height": 600,
+   "focal_px": 401.7
+  },
+  "back_right": {
+   "x": -0.14,
+   "y": 0.591,
+   "z": 2.166,
+   "pitch": -17.1,
+   "yaw": 109.1,
+   "roll": 0.63,
+   "render_width": 964,
+   "render_height": 608,
+   "render_fov": 100.216,
+   "crop": [
+    4,
+    0,
+    960,
+    600
+   ],
+   "image_width": 960,
+   "image_height": 600,
+   "focal_px": 402.9
+  },
+  "bird": {
+   "x": 1.5203,
+   "y": 0.0,
+   "z": 25.0,
+   "pitch": -90.0,
+   "yaw": 0.0,
+   "roll": 0.0,
+   "render_width": 1280,
+   "render_height": 720,
+   "render_fov": 90.0,
+   "crop": null,
+   "image_width": 1280,
+   "image_height": 720,
+   "focal_px": 640.0
+  },
+  "chase": {
+   "x": -8.682,
+   "y": 0.0,
+   "z": 6.1335,
+   "pitch": -15.0,
+   "yaw": 0.0,
+   "roll": 0.0,
+   "render_width": 1280,
+   "render_height": 720,
+   "render_fov": 90.0,
+   "crop": null,
+   "image_width": 1280,
+   "image_height": 720,
+   "focal_px": 640.0
+  }
+ }
+}
