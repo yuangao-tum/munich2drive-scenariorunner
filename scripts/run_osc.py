@@ -234,7 +234,9 @@ def main():
     ap.add_argument("xosc", type=Path)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=4100)
-    ap.add_argument("--tm-port", type=int, default=8100, help="Traffic Manager port")
+    ap.add_argument("--tm-port", type=int, default=None,
+                    help="Traffic Manager port (default: --port + 4000, so runs against two servers "
+                         "on one machine do not collide)")
     ap.add_argument("--out", type=Path, default=Path("runs"))
     ap.add_argument("--sr-root", type=Path, default=Path(os.environ.get(
         "SCENARIO_RUNNER_ROOT", "~/scenario_runner")).expanduser())
@@ -255,6 +257,8 @@ def main():
     ap.add_argument("--timeout", type=float, default=300.0)
     args = ap.parse_args()
 
+    if args.tm_port is None:
+        args.tm_port = args.port + 4000
     if args.lamp_bridge and not args.lamp_heads:
         ap.error("--lamp-bridge needs --lamp-heads <server>/german_light_heads.json")
     rig_spec = None if args.no_record else json.loads(args.rig.read_text())
@@ -469,6 +473,8 @@ def main():
                 STATE["lamps"] = lamps_dark(world, args.lamp_bridge, args.lamp_heads)
                 flush_poses(0.0)
             hero = next((a for a in actors if a.attributes.get("role_name") == "hero"), None)
+            if rig_spec is not None and hero is None:     # a base scenario: nobody to film from
+                STATE["cameras"] = "skipped: the scenario has no hero"
             if rig_spec is not None and hero is not None:
                 holder["rig"] = Rig(carla, world, hero, rig_spec, views, out_dir,
                                     int(rig_spec.get("fps", 10)), args.edge_low,
@@ -544,7 +550,7 @@ def main():
             sys.stdout, sys.stderr = so, se
     wall = time.time() - t0
     text = log_path.read_text(errors="replace")
-    views_ok = rig_spec is None or (STATE["views"] and all(
+    views_ok = rig_spec is None or STATE.get("cameras") is not None or (STATE["views"] and all(
         v["frames"] == horizon and v["missed"] == 0 and v["ffmpeg_rc"] == 0
         for v in STATE["views"].values()))
     completed = (STATE["sr_returned"] and STATE["capture_error"] is None
@@ -569,7 +575,7 @@ def main():
         "weather": STATE["weather"], "lamps": STATE["lamps"],
         "pose_batch_errors": STATE["batch_errors"],
         "planner_segments_capped": STATE["planner_capped"],
-        "pose_audit": audit.report(), "views": STATE["views"],
+        "pose_audit": audit.report(), "views": STATE["views"], "cameras": STATE.get("cameras"),
         "sr_warnings": [ln for ln in text.splitlines() if "WARNING" in ln][:30],
     }
     (out_dir / "run.json").write_text(json.dumps(report, indent=1))

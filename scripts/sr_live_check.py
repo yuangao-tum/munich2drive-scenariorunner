@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Live check of an exported .xosc: run ScenarioRunner on it and watch the world from a 2nd client.
 
-    python tools/sr_live_check.py --xosc <dir>/variants/scenario_00_ego_5105.xosc --port 4100
+    python scripts/sr_live_check.py --xosc <dir>/variants/scenario_00_ego_5105.xosc --port 4100 \
+        --carla-pythonapi ~/carla_servers/<server folder>/PythonAPI/carla
 
 Needs a running CARLA 0.9.16 server with the file's map. Starts ScenarioRunner
 (`scenario_runner.py --openscenario <xosc> --sync --timeout 300 --port P`) as a child and, while
@@ -107,6 +108,10 @@ def main():
     ap.add_argument("--sr", type=Path, default=Path(os.environ.get(
         "SCENARIO_RUNNER_ROOT", "~/scenario_runner")).expanduser())
     ap.add_argument("--sr-python", default=sys.executable)
+    ap.add_argument("--carla-pythonapi", type=Path, default=(
+        Path(os.environ["CARLA_ROOT"]) / "PythonAPI" / "carla" if os.environ.get("CARLA_ROOT") else None),
+        help="CARLA's PythonAPI/carla folder (ScenarioRunner imports its `agents`); "
+             "default $CARLA_ROOT/PythonAPI/carla")
     ap.add_argument("--extra", default="", help="more scenario_runner.py arguments")
     args = ap.parse_args()
 
@@ -121,8 +126,14 @@ def main():
            "--host", args.host,
            "--port", str(args.port)] + args.extra.split()
     t_wall = time.time()
-    p = subprocess.run(cmd, cwd=args.sr, capture_output=True, text=True,
-                       env=dict(os.environ, PYTHONUNBUFFERED="1"))
+    env = dict(os.environ, PYTHONUNBUFFERED="1")
+    if args.carla_pythonapi:
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(args.carla_pythonapi.expanduser())] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
+    p = subprocess.run(cmd, cwd=args.sr, capture_output=True, text=True, env=env)
+    if "ModuleNotFoundError" in p.stdout + p.stderr:
+        sys.exit("ScenarioRunner could not import a module -- pass --carla-pythonapi "
+                 "<CARLA>/PythonAPI/carla:\n" + "\n".join((p.stdout + p.stderr).splitlines()[-8:]))
     wall = time.time() - t_wall
     rec.stop = True
     th.join(5.0)

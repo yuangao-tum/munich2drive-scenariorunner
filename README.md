@@ -15,8 +15,8 @@ them.
 ## Quick start
 
 ```bash
-# 0. environment (details: docs/setup.md)
-sudo apt install ffmpeg
+# 0. environment: Python 3.10 or 3.11 (details: docs/setup.md)
+sudo apt install ffmpeg git libvulkan1
 python3.10 -m venv ~/m2d-sr && . ~/m2d-sr/bin/activate
 pip install -U pip "huggingface_hub>=0.25" && hf auth login
 
@@ -75,7 +75,7 @@ of the 6 test variants.
 - [docs/setup.md](docs/setup.md): environment, servers from Hugging Face, ScenarioRunner, scenario files
 - [docs/munich.md](docs/munich.md), [docs/bayarea.md](docs/bayarea.md): running on each map family
 - [docs/recording.md](docs/recording.md): cameras, edge views, outputs, plain ScenarioRunner, comparison
-- [docs/test-report.md](docs/test-report.md): the 5-scenario test on both map families
+- [docs/test-report.md](docs/test-report.md): the test on both map families (6 variants, 1 base scenario)
 
 ## Layout
 

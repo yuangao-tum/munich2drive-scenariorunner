@@ -6,14 +6,24 @@ attached; two servers fit on a 24 GB card.
 ## 0. Environment
 
 ```bash
-sudo apt install ffmpeg                          # with libx264: the recorder pipes every camera into it
+sudo apt install ffmpeg git libvulkan1           # ffmpeg with libx264; CARLA renders through Vulkan
 python3.10 -m venv ~/m2d-sr && . ~/m2d-sr/bin/activate
 pip install -U pip "huggingface_hub>=0.25"
 hf auth login                                    # or: export HF_TOKEN=...
 ```
 
-Use a separate environment for this repository. ScenarioRunner pins `antlr4-python3-runtime==4.10`,
-and a package built against ANTLR 4.9 (for example `omegaconf`) cannot be imported next to it.
+**Python 3.10 or 3.11.** ScenarioRunner 0.9.16 pins numpy 1.24.4, which has no wheel for 3.12.
+
+- **Ubuntu 22.04:** `sudo apt install python3.10-venv`.
+- **Ubuntu 24.04 and later:** these ship only 3.12; get 3.10 from the deadsnakes PPA
+  (`sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt install python3.10 python3.10-venv`),
+  from conda, or with `uv venv --python 3.10`.
+
+**Driver.** The NVIDIA driver must support Vulkan; `vulkaninfo` (package `vulkan-tools`) checks it.
+
+**Separate environment.** Use one for this repository only: ScenarioRunner pins
+`antlr4-python3-runtime==4.10`, and a package built against ANTLR 4.9 (for example `omegaconf`)
+cannot be imported next to it.
 
 ## 1. A CARLA server with the maps
 
@@ -55,8 +65,9 @@ scripts/start_carla.sh ~/carla_servers/BayArea_carla0916_server_v1        4100
 ```
 
 It uses the flags of the munich2drive clips: `-RenderOffScreen -quality-level=Epic -nosound`, RPC
-port 4100. The server also uses 4101 and 4102, so a second server on the same machine needs another
-port, e.g. 4110. On a machine with several GPUs set `CARLA_GPU=<index>`. On the Munich server the
+port 4100. The server also uses 4101 and 4102. For a second server on the same machine, start it on
+another port (e.g. 4110), and run `run_osc.py --port 4110` against it. The Traffic Manager port
+defaults to the server port + 4000, so the two runs do not collide. On a machine with several GPUs set `CARLA_GPU=<index>`. On the Munich server the
 script also switches on the control of the map's German traffic-light lamp heads, and prints the two
 `run_osc.py` arguments that use it.
 

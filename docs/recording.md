@@ -15,7 +15,7 @@ in-process:
 |---|---|
 | weather | The scenario's exact CARLA weather (`Carla_*` parameters) is set before the actors spawn, and again where ScenarioRunner applies the `Environment`. ScenarioRunner itself rebuilds the weather from CARLA defaults and sets only sun, cloudiness, fog distance and rain; a cloudy scenario then gets a black sky on these maps. |
 | time | OpenSCENARIO's `SimulationTimeCondition` is absolute simulation time. ScenarioRunner starts its clock when the event starts, which makes every `DeleteEntityAction` fire 0.2 s late. Here the conditions count from t = 0; `TimeOut`, which ScenarioRunner uses for condition delays and its own timeout, keeps its clock. |
-| spawning | ScenarioRunner spawns every agent 0.2 m above its pose and only warns when CARLA refuses one, which happens when its body touches the road or another car (4–11 agents of 120–190 per scenario). Refused agents are spawned again with more lift, then high in the air. Agents beyond UE4's 10.48 km physics bound (Munich's east end) are spawned inside it and moved out; otherwise CARLA reports a 0 × 0 × 0 bounding box for them. |
+| spawning | ScenarioRunner spawns every agent 0.2 m above its pose and only warns when CARLA refuses one, which happens when its body touches the road or another car (0–48 agents per variant in the test, of 83–189). Refused agents are spawned again with more lift, then high in the air. Agents beyond UE4's 10.48 km physics bound (Munich's east end) are spawned inside it and moved out; otherwise CARLA reports a 0 × 0 × 0 bounding box for them. |
 | route planner | ScenarioRunner builds CARLA's `GlobalRoutePlanner` for every map. On Belmont, three road segments never reach their end by `next()`, and the planner's loop grows until the process is killed. Here every segment's walk is capped. |
 | ticks | Every actor's pose comes from the replay controller's placement (`osc/osc_replay_control.py`): all poses for a tick go out in one synchronous batch right before the world tick. A controller's own `set_transform` is asynchronous and once in ~37,000 actor-frames landed after the tick. Before the first tick every actor is placed, the Munich lamp heads go dark and the cameras are attached; one extra tick films t = 0. After each tick the script waits for every camera's image of exactly that frame, so no frame is lost or doubled. |
 
@@ -73,11 +73,13 @@ The exit status is 0 only when `ok` is true.
 ## Plain ScenarioRunner
 
 ```bash
-python scenario_runner.py --openscenario <file>.xosc --sync --frameRate 10 --timeout 300
+cd ~/scenario_runner
+PYTHONPATH=~/carla_servers/<server folder>/PythonAPI/carla python scenario_runner.py \
+    --openscenario <file>.xosc --sync --frameRate 10 --timeout 300 --port 4100
 ```
 
 This runs a file only if CARLA spawns every agent. CARLA refuses an agent whose body touches the road
-or another car at spawn, which happened in 5 of the 6 test variants (4–11 agents each). ScenarioRunner
+or another car at spawn, which happened in 5 of the 6 test variants (4–48 agents each). ScenarioRunner
 then aborts the scenario:
 
 - at load, with "Cannot find actor", when the file later removes the refused agent;
@@ -107,8 +109,10 @@ x − 1.52·cos h, y − 1.52·sin h. The other agents keep their recorded motio
 python scripts/compare_clip.py runs/scenario_00_ego_5105 <folder with the clip's videos>
 ```
 
-This gives PSNR and SSIM per view, frame by frame (`compare.json`). Expect 25–33 dB and 0.88–0.98
-even when every pose agrees to the millimetre: CARLA animates vegetation in the wind in real time,
+This gives PSNR and SSIM per view, frame by frame (`compare.json`). The test runs reached 24–41 dB
+mean PSNR (single views down to 20 dB in heavy rain) and SSIM 0.90–0.98, with every pose within
+1.4 mm. The differences come from rendering: rain streaks are drawn randomly, CARLA animates
+vegetation in the wind in real time,
 lens flare and temporal anti-aliasing differ between two runs, and the traffic lights run CARLA's
 own cycles in a re-run.
 

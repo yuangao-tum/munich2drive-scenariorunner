@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -101,14 +102,19 @@ def main():
     archive_bytes = 0 if args.archive else next(
         (f.size for f in HfApi().list_repo_tree(repo, repo_type="dataset")
          if getattr(f, "path", "") == s["archive"]), 0)
-    # the peak: the archive (unless it is already local) plus the unpacked tree, plus 5 %
-    need = (archive_bytes + s["unpacked_gb"] * 1e9) * 1.05
-    have = shutil.disk_usage(dest).free
-    if adir.resolve() != dest.resolve() and not args.archive:
-        have = min(have, shutil.disk_usage(adir).free + shutil.disk_usage(dest).free)
-    if have < need:
-        sys.exit(f"need ~{need / 1e9:.0f} GB free (archive {archive_bytes / 1e9:.0f} GB + "
-                 f"unpacked {s['unpacked_gb']} GB), have {have / 1e9:.0f} GB")
+    # the peak: the archive (unless it is already local) and the unpacked tree, plus 5 % each;
+    # one budget when both live on one filesystem, else one per filesystem
+    unpacked = s["unpacked_gb"] * 1e9 * 1.05
+    archive_need = archive_bytes * 1.05
+    if os.stat(adir).st_dev == os.stat(dest).st_dev:
+        checks = [(dest, unpacked + archive_need)]
+    else:
+        checks = [(dest, unpacked), (adir, archive_need)]
+    for where, need in checks:
+        have = shutil.disk_usage(where).free
+        if have < need:
+            sys.exit(f"need ~{need / 1e9:.0f} GB free in {where}, have {have / 1e9:.0f} GB "
+                     f"(archive {archive_bytes / 1e9:.0f} GB, unpacked {s['unpacked_gb']} GB)")
     want = sums.read_text().split()[0].strip().lower()
     if args.archive:
         archive = args.archive.expanduser().resolve()
