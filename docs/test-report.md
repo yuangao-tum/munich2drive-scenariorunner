@@ -10,7 +10,7 @@ plus their 8 edge views, and compared with the original munich2drive camera clip
 | GPU | one NVIDIA RTX 5090 (32 GB), two CARLA servers on it at the same time |
 | Servers | Munich server v5 (port 4110) and Bay Area server v1 (port 4100), started with `scripts/start_carla.sh` |
 | ScenarioRunner | stock 0.9.16 (tag `v0.9.16`, commit 94ff3b8), Python 3.10, CARLA client 0.9.16 |
-| Scenario files | exported by munich2drive-openscenario, identical to the published sets |
+| Scenario files | from the published munich2drive OpenSCENARIO sets (identical files) |
 | Runner | `run_osc.py` (it runs ScenarioRunner with `--sync --frameRate 10`); Munich runs also with `--lamp-bridge` |
 
 ## Scenarios

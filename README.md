@@ -3,8 +3,8 @@
 Run the **munich2drive OpenSCENARIO scenarios** in CARLA 0.9.16 with **ScenarioRunner 0.9.16**,
 and record the ego's camera views together with an **edge-detection** video of every view.
 
-The scenarios themselves (Munich and Bay Area maps, base scenarios and ego variants) and how they are
-generated are in **munich2drive-openscenario**. This repository is only about running and rendering
+The input is a set of munich2drive OpenSCENARIO files (Munich and Bay Area maps, base scenarios and
+ego variants), which are distributed separately (see below). This repository only runs and renders
 them.
 
 | Map family | Maps | CARLA 0.9.16 server: private Hugging Face dataset repo | or the TUM AVS lab NAS (`AVS-Share`) |
