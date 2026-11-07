@@ -6,7 +6,7 @@
 | Server | CARLA 0.9.16 server **v5**, `Munich_Route_1_carla0916_server_v5.tar.gz`: Hugging Face `Yuan-avs/Munich_Route_1_carla0916` (private), or the lab NAS (`AVS-Share`) `Yuan/Mifcom2/Maps/Munich/` |
 | Scenarios | 117 scenarios: 39 each with light, moderate and dense traffic, 20 s at 10 Hz |
 | Variants | one per munich2drive Route_1 camera clip (EDGAR as the ego, up to 10 per scenario) |
-| Scenario files | folder `Munich_Route_1/` of the private Hugging Face dataset repo `<scenario dataset>`, or the lab NAS `Yuan/Mifcom2/Dataset/munich2drive_route1_odd/openscenario/` |
+| Scenario files | lab NAS (`AVS-Share`) `Yuan/Mifcom2/Dataset/munich2drive_route1_odd/openscenario/`; three samples in `samples/Munich_Route_1/` |
 
 ## Install and start
 

@@ -17,8 +17,8 @@ cameras plus the `bird` and `chase` views, and below them the edge view of each.
 | Munich | `Munich_Route_1` | `Yuan-avs/Munich_Route_1_carla0916` | `Yuan/Mifcom2/Maps/Munich/` |
 | Bay Area | `Page_Mill_Rd_Palo_Alto_CA`, `Yale_St_Palo_Alto_CA`, `Belmont_Office_Park_Belmont_CA` | `TUM-AVS/BayArea_carla0916` | `Yuan/Mifcom2/Maps/California/` |
 
-The scenario files are private too: Hugging Face `<scenario dataset>`, or the
-`openscenario/` folders of the sets on the NAS ([docs/setup.md](docs/setup.md#4-the-scenario-files)).
+The scenario files are private too: the `openscenario/` folders of the sets on the NAS
+([docs/setup.md](docs/setup.md#4-the-scenario-files)).
 
 ![The front camera on the four maps, with its edge view](docs/media/maps_front_edge.jpg)
 *The front camera on each map, with its edge view below: Munich_Route_1, Page Mill Rd, Yale St and

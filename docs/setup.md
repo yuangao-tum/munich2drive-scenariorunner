@@ -122,9 +122,7 @@ or `CARLA_ROOT=~/carla_servers/<server folder>` work as well.
 ## 4. The scenario files
 
 Seven scenarios to try are in [samples/](../samples/) (no download needed). The full OpenSCENARIO
-sets are in the private Hugging Face dataset repo
-`<scenario dataset>`, one folder per map, and on the lab NAS (`AVS-Share`) in the
-`openscenario/` folder of each set:
+sets are on the lab NAS (`AVS-Share`), in the `openscenario/` folder of each set:
 
 | Set | Lab NAS (`AVS-Share`) |
 |---|---|
@@ -134,9 +132,8 @@ sets are in the private Hugging Face dataset repo
 | Belmont_Office_Park_Belmont_CA | `Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_belmont/openscenario/` |
 
 ```bash
-hf download <scenario dataset> --repo-type dataset \
-    --include "Yale_St_Palo_Alto_CA/*" --local-dir ~/m2d_osc
-# or: cp -r /mnt/avs-share/Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_yale/openscenario ~/m2d_osc/Yale_St_Palo_Alto_CA
+# e.g. the Yale set, with the share mounted at /mnt/avs-share
+cp -r /mnt/avs-share/Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_yale/openscenario ~/m2d_osc/Yale_St_Palo_Alto_CA
 ```
 
 Keep each set's folder as it is: `osc_replay_control.py` must stay next to the `.xosc` files.
