@@ -16,6 +16,8 @@ def mean(xs):
 
 
 def row(d: Path) -> str:
+    if not (d / "run.json").exists():                # the run died before writing it
+        return f"| {d.name} | no run.json (see {d / 'scenario_runner.log'}) |" + " |" * 10
     r = json.loads((d / "run.json").read_text())
     c = json.loads((d / "compare.json").read_text()) if (d / "compare.json").exists() else None
     views = r.get("views") or {}
