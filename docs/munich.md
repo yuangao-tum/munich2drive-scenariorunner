@@ -27,8 +27,11 @@ The scenario files: `~/m2d_osc/Munich_Route_1/` downloaded as in [setup.md](setu
 SRV=~/carla_servers/Munich_Route_1_carla0916_server_v5
 python scripts/run_osc.py ~/m2d_osc/Munich_Route_1/variants/scenario_00_ego_6938.xosc --port 4100 --out runs/ \
     --sr-root ~/scenario_runner --carla-pythonapi $SRV/PythonAPI/carla \
-    --lamp-bridge $SRV/lights_bridge/4100/control --lamp-heads $SRV/german_light_heads.json
+    --lamp-bridge $SRV/lights_bridge/4100/control --lamp-heads $SRV/german_light_heads.json \
+    --lamp-plan ~/m2d_osc/Munich_Route_1/lamps/scenario_00.json
 ```
+
+`--lamp-plan` is optional: without it the lamp heads stay dark.
 
 ## What is specific to this map
 
@@ -39,7 +42,8 @@ python scripts/run_osc.py ~/m2d_osc/Munich_Route_1/variants/scenario_00_ego_6938
   on and an off mesh, so without control all of them look lit. Server v5 can switch them
   through a file bridge (`-GermanLightControl`). `run_osc.py --lamp-bridge` switches all heads
   dark before t = 0, as in the clips. In the clips, the heads at signalised junctions then
-  followed the signal plan; the re-runs leave them dark.
+  followed the scenario's signals; `--lamp-plan` with the scenario's lamp plan does the same in a
+  re-run, frame for frame ([recording.md](recording.md), "Lamp plans"). Without it they stay dark.
 - **Vehicles:** the European CARLA fleet, and Munich buses `vehicle.generic.citaro_12m` and
   `vehicle.generic.tourismo_12m`, which stock CARLA does not have (both munich2drive servers do).
 - **Elevation:** the corridor lies at ~500–530 m with stacked roads; z in the files is the road

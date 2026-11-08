@@ -29,12 +29,18 @@ ScenarioRunner itself is not modified; this script patches it in-process:
                attached; one pre-roll tick films t = 0. After each tick the script waits for every
                view's image of exactly that frame, pipes it into one ffmpeg per view (<view>.mp4 +
                <view>_edge.mp4), and audits every actor against the file.
+  6. lamps     With --lamp-plan, the Munich lamp heads then show the scenario's lamp plan: before
+               the tick that films frame k, the heads whose state changes at step k are switched,
+               and the server's reply after the tick proves the change is on frame k.
 ScenarioRunner runs with --sync --frameRate 10: one tick per scenario step, 200 frames.
-Output: <out>/<clip>/{<view>.mp4, <view>_edge.mp4, run.json, scenario_runner.log}.
+Output: <out>/<clip>/{<view>.mp4, <view>_edge.mp4, trajectory.json, run.json,
+scenario_runner.log} (+ lamps.json with --lamp-plan). trajectory.json is the ego at every frame
+in the columns of the munich2drive clips' <prefix>_trajectory.json.
 Exit status 0 only when every check in run.json "checks" passes: the run completed; every agent
 spawned and was in every frame until its removal, and none after it; every pose within
---pose-tolerance of the file; every frame one step after the previous one; every view complete;
-the lamp heads switched (--lamp-bridge).
+--pose-tolerance of the file; the ego's realized pose within 0.10 m / 2 deg of its placement;
+every frame one step after the previous one; every view complete; the lamp heads switched
+(--lamp-bridge) and showed the plan on every frame (--lamp-plan).
 """
 from __future__ import annotations
 
@@ -46,7 +52,9 @@ import queue
 import subprocess
 import sys
 import time
+import uuid
 import xml.etree.ElementTree as ET
+from collections import defaultdict
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -247,6 +255,255 @@ class Audit:
                 "in_view_after_delete": self.ghosts}
 
 
+def interp_pose(traj, t: float):
+    """(x, y, yaw_deg) of a file trajectory at time t, CARLA frame: linear, the yaw the short
+    way, held at the ends."""
+    ts, pts = traj["t"], traj["pts"]
+    if len(ts) == 1 or t <= ts[0]:
+        return pts[0][0], pts[0][1], pts[0][3]
+    if t >= ts[-1]:
+        return pts[-1][0], pts[-1][1], pts[-1][3]
+    import bisect
+    i = bisect.bisect_right(ts, t) - 1
+    w = (t - ts[i]) / (ts[i + 1] - ts[i])
+    a, b = pts[i], pts[i + 1]
+    return (a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w,
+            a[3] + ((b[3] - a[3] + 180.0) % 360.0 - 180.0) * w)
+
+
+def _axes(yaw: float, pitch: float, roll: float):
+    """Forward and up unit vectors of a UE4 rotator in degrees. Comparing axes instead of Euler
+    angles is immune to the rotator's equivalent forms (pitch 350 is -10, and (p, y, r) equals
+    (180 - p, y + 180, r + 180))."""
+    cy, sy = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    cp, sp = math.cos(math.radians(pitch)), math.sin(math.radians(pitch))
+    cr, sr = math.cos(math.radians(roll)), math.sin(math.radians(roll))
+    return ((cp * cy, cp * sy, sp),
+            (-(cr * sp * cy + sr * sy), cy * sr - cr * sp * sy, cr * cp))
+
+
+def _angle_deg(u, v) -> float:
+    d = u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
+    return math.degrees(math.acos(max(-1.0, min(1.0, d))))
+
+
+class EgoRecord:
+    """The ego ("hero") at every captured frame: trajectory.json, in the columns of the
+    munich2drive clips' <prefix>_trajectory.json, and the ego pose audit.
+
+    x, y, yaw    the file's trajectory point (the ego's box centre) at the frame's time, in the
+                 file's frame (OpenSCENARIO: x east, y north, yaw in rad) -- the same frame as
+                 the clips' CommonRoad x, y, yaw on these maps
+    carla_*      that point in the CARLA frame (y and the angle flipped)
+    z, pitch, roll, carla_yaw_deg
+                 the placed pose: road height under the actor origin (the origin sits z_off
+                 above it), its pitch and roll, and the yaw
+    rear_axle_*  where the actor ORIGIN was placed (EDGAR's origin is its rear axle)
+    realized_*   the actor transform CARLA reported after the tick (CARLA frame, origin)
+    The file has no speeds, so the clips' v, a and yaw_rate are not written.
+    Audit: realized against placed at every frame -- horizontal and vertical offset, tilt (the
+    angle between the up axes) and the angle between the forward axes; a frame without the ego
+    fails too (the clips' ego_pose_audit, same tolerances)."""
+    KEYS = ("t", "x", "y", "carla_x", "carla_y", "yaw", "z", "pitch", "roll", "carla_yaw_deg",
+            "rear_axle_x", "rear_axle_y", "rear_axle_carla_x", "rear_axle_carla_y",
+            "realized_x", "realized_y", "realized_z",
+            "realized_yaw_deg", "realized_pitch_deg", "realized_roll_deg")
+
+    def __init__(self, dt: float, tol_m: float = 0.10, tol_deg: float = 2.0):
+        self.dt, self.tol_m, self.tol_deg = dt, tol_m, tol_deg
+        self.cols: dict = {k: [] for k in self.KEYS}
+        self.worst = {"xy_m": 0.0, "z_m": 0.0, "tilt_deg": 0.0, "fwd_deg": 0.0}
+        self.bad: list = []
+        self.n_bad = 0
+        self.missing: list = []
+        self.audited = 0
+
+    def frame(self, k: int, snap, holder: dict, trajs: dict, pose_at) -> None:
+        aid = holder["ids"].get("hero")
+        if aid is None:
+            return
+        s = snap.find(aid)
+        r = s.get_transform() if s is not None else None
+        tr = trajs.get("hero")
+        c = self.cols
+        c["t"].append(k)
+        plan = None
+        if tr is not None:
+            t = k * self.dt
+            px, py, pyaw = interp_pose(tr, t)
+            plan = pose_at(*holder["tracks"]["hero"], t)
+            z_off = holder["boxes"]["hero"][2]
+            vals = {"x": px, "y": -py, "carla_x": px, "carla_y": py,
+                    "yaw": -math.radians(pyaw), "z": plan.location.z - z_off,
+                    "pitch": plan.rotation.pitch, "roll": plan.rotation.roll,
+                    "carla_yaw_deg": plan.rotation.yaw,
+                    "rear_axle_x": plan.location.x, "rear_axle_y": -plan.location.y,
+                    "rear_axle_carla_x": plan.location.x, "rear_axle_carla_y": plan.location.y}
+            for key, v in vals.items():
+                c[key].append(round(v, 5 if key == "yaw" else 3))
+        else:                                          # an ego under external control
+            for key in self.KEYS[1:14]:
+                c[key].append(None)
+        rv = (None,) * 6 if r is None else (r.location.x, r.location.y, r.location.z,
+                                            r.rotation.yaw, r.rotation.pitch, r.rotation.roll)
+        for key, v in zip(self.KEYS[14:], rv):
+            c[key].append(None if v is None else round(v, 3))
+        if plan is None:
+            return
+        if r is None:
+            self.missing.append(k)
+            return
+        pf, pu = _axes(plan.rotation.yaw, plan.rotation.pitch, plan.rotation.roll)
+        rf, ru = _axes(r.rotation.yaw, r.rotation.pitch, r.rotation.roll)
+        d = {"xy_m": math.hypot(r.location.x - plan.location.x, r.location.y - plan.location.y),
+             "z_m": r.location.z - plan.location.z,
+             "tilt_deg": _angle_deg(pu, ru), "fwd_deg": _angle_deg(pf, rf)}
+        self.audited += 1
+        for key, v in d.items():
+            if abs(v) > abs(self.worst[key]):
+                self.worst[key] = v
+        if (d["xy_m"] > self.tol_m or abs(d["z_m"]) > self.tol_m
+                or d["tilt_deg"] > self.tol_deg or d["fwd_deg"] > self.tol_deg):
+            self.n_bad += 1
+            if len(self.bad) < 20:
+                self.bad.append({"frame": k, **{key: round(v, 3) for key, v in d.items()}})
+
+    def audit(self) -> dict | None:
+        if not self.cols["t"]:
+            return None
+        return {"tol_m": self.tol_m, "tol_deg": self.tol_deg, "frames_audited": self.audited,
+                "worst": {k: round(v, 4) for k, v in self.worst.items()},
+                "frames_over_tolerance": self.n_bad, "first_over_tolerance": self.bad,
+                "frames_without_ego": self.missing[:20], "n_frames_without_ego": len(self.missing)}
+
+    def ok(self) -> bool:
+        return self.n_bad == 0 and not self.missing
+
+
+class LampPlayer:
+    """Plays a lamp plan (--lamp-plan) on a Munich server v5 through its GermanLightControl
+    bridge, after lamps_dark has set every head dark.
+
+    The plan: {"steps": N, "heads": {<head path>: [[t, state], ...]}} -- the munich2drive
+    clips' <prefix>_lamps.json format. Every head starts dark; at step t it changes to `state`
+    (green, yellow, red, red_yellow, off). Before the tick that films frame k, the heads whose
+    state changes at step k go out in one request: for each colour of the head, its on and off
+    lamp meshes lit when the colour is part of the state. After the tick the server's reply must
+    name that request, which proves the lamps changed on frame k. The server reads requests at
+    most every 50 ms of wall time, so a request waits >= 60 ms after the previous tick. A
+    missed or refused reply leaves the heads as they were; the change goes out again with the
+    next frame, and the run records it."""
+
+    def __init__(self, prefix: str, heads_json: Path, plan_path: Path):
+        inv = json.loads(Path(heads_json).read_text())["heads"]
+        plan = json.loads(Path(plan_path).read_text())
+        self.name = Path(plan_path).name
+        self.prefix = prefix
+        self.steps = int(plan["steps"])
+        self.plan_heads = {h: sorted((int(t), s) for t, s in runs)
+                           for h, runs in plan["heads"].items()}
+        unknown = sorted(set(self.plan_heads) - set(inv))
+        if unknown:
+            raise ValueError(f"{self.name}: {len(unknown)} head(s) not in {heads_json} "
+                             f"(first: {unknown[0]})")
+        bad = sorted({s for runs in self.plan_heads.values() for _t, s in runs}
+                     - {"off", "green", "yellow", "red", "red_yellow"})
+        if bad:
+            raise ValueError(f"{self.name}: unknown lamp state(s) {bad}")
+        self.lamps = {h: inv[h]["lamps"] for h in self.plan_heads}
+        self.shown = {h: "off" for h in self.plan_heads}
+        self.pending = None
+        self.last_tick = time.monotonic()
+        self.armed = False
+        self.changes = 0
+        self.not_applied: list = []
+        self.refused: list = []
+        self.history: dict = defaultdict(list)
+
+    def state(self, h: str, k: int) -> str:
+        s = "off"
+        for t, st in self.plan_heads[h]:
+            if t > k:
+                break
+            s = st
+        return s
+
+    def arm(self) -> None:
+        """The heads are dark (lamps_dark answered): play from the next tick on."""
+        self.armed = True
+        self.last_tick = time.monotonic()
+
+    def before_tick(self, k: int) -> None:
+        self.pending = None
+        if not self.armed:
+            return
+        t = min(k, self.steps - 1)
+        changed = {h: self.state(h, t) for h in self.plan_heads}
+        changed = {h: s for h, s in changed.items() if self.shown[h] != s}
+        if not changed:
+            return
+        lens = []
+        for h, s in changed.items():
+            active = set() if s == "off" else set(s.split("_"))
+            for colour, pair in self.lamps[h].items():
+                for key in ("on", "off"):
+                    lens.append({"path": pair[key], "lit": colour in active})
+        req = {"id": uuid.uuid4().hex, "command": "lamps", "changes": lens}
+        tmp = Path(self.prefix + ".request.tmp")
+        tmp.write_text(json.dumps(req))
+        os.replace(tmp, self.prefix + ".request.json")
+        self.pending = (req["id"], changed, k)
+        wait = 0.06 - (time.monotonic() - self.last_tick)
+        if wait > 0:
+            time.sleep(wait)
+
+    def after_tick(self) -> None:
+        self.last_tick = time.monotonic()
+        if not self.pending:
+            return
+        rid, changed, k = self.pending
+        self.pending = None
+        try:
+            reply = json.loads(Path(self.prefix + ".response.json").read_text())
+        except (FileNotFoundError, ValueError):
+            reply = {}
+        if reply.get("id") != rid:
+            self.not_applied.append(k)
+            return
+        if not reply.get("ok", False):
+            self.refused.append(k)
+            return
+        for h, s in changed.items():
+            self.shown[h] = s
+            self.history[h].append([k, s])
+        self.changes += len(changed)
+
+    def expected(self, frames: int) -> dict:
+        """The plan's changes within the frames filmed (what a perfect run shows)."""
+        out = {}
+        for h in self.plan_heads:
+            runs, cur = [], "off"
+            for t, s in self.plan_heads[h]:
+                if t < frames and s != cur:
+                    runs.append([t, s])
+                    cur = s
+            if runs:
+                out[h] = runs
+        return out
+
+    def followed(self, frames: int) -> bool:
+        return self.armed and dict(self.history) == self.expected(frames)
+
+    def report(self, frames: int) -> dict:
+        return {"plan": self.name, "steps": self.steps, "heads_in_plan": len(self.plan_heads),
+                "played": self.armed, "changes": self.changes,
+                "changes_planned": sum(len(v) for v in self.expected(frames).values()),
+                "requests_not_applied_in_tick": len(self.not_applied),
+                "first_not_applied": self.not_applied[:5],
+                "requests_refused": len(self.refused), "first_refused": self.refused[:5],
+                "followed": self.followed(frames)}
+
+
 # ------------------------------------------------------------------ main
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -270,6 +527,10 @@ def main():
     ap.add_argument("--lamp-heads", type=Path, default=None,
                     help="german_light_heads.json (download_server.py puts it in the Munich "
                          "server folder); needed with --lamp-bridge")
+    ap.add_argument("--lamp-plan", type=Path, default=None,
+                    help="Munich: the scenario's lamp plan (lamps/scenario_<id>.json next to the "
+                         "set's base/ and variants/); the heads show it instead of staying dark. "
+                         "Needs --lamp-bridge")
     ap.add_argument("--edge-low", type=float, default=0.08)
     ap.add_argument("--edge-high", type=float, default=0.25)
     ap.add_argument("--crf", type=int, default=18)
@@ -282,6 +543,14 @@ def main():
         args.tm_port = args.port + 4000
     if args.lamp_bridge and not args.lamp_heads:
         ap.error("--lamp-bridge needs --lamp-heads <server>/german_light_heads.json")
+    if args.lamp_plan and not args.lamp_bridge:
+        ap.error("--lamp-plan needs --lamp-bridge (and --lamp-heads)")
+    lamp_player = None
+    if args.lamp_plan:
+        try:
+            lamp_player = LampPlayer(args.lamp_bridge, args.lamp_heads, args.lamp_plan)
+        except (OSError, ValueError, KeyError) as e:
+            ap.error(f"--lamp-plan: {e}")
     rig_spec = None if args.no_record else json.loads(args.rig.read_text())
     views = [v for v in args.views.split(",") if v]
     if rig_spec is not None:
@@ -329,8 +598,10 @@ def main():
                    "weather": exact_weather or None, "lamps": None, "frames": 0, "colors": {},
                    "planner_capped": set(), "capture_error": None, "sr_returned": False,
                    "batch_errors": 0, "views": None, "frame_errors": [], "n_frame_errors": 0}
-    holder: dict = {"rig": None, "ids": {}, "boxes": {}, "tracks": {}, "k": 0, "tree": None}
+    holder: dict = {"rig": None, "ids": {}, "boxes": {}, "tracks": {}, "k": 0, "tree": None,
+                    "hero": None}
     audit = Audit(trajs, DT)
+    ego = EgoRecord(DT)
 
     # 1. weather: exact, before the actors spawn and where ScenarioRunner sets the Environment
     def initialize_environment(self, world):
@@ -465,6 +736,16 @@ def main():
                 if r.error:
                     STATE["batch_errors"] += 1
 
+    def lamp_tick(world) -> int:
+        """world.tick(), with the lamp changes of the frame it films (--lamp-plan) sent before
+        it and confirmed after it."""
+        if lamp_player is not None:
+            lamp_player.before_tick(holder["k"])
+        frame = world.tick()
+        if lamp_player is not None:
+            lamp_player.after_tick()
+        return frame
+
     def capture(world, frame) -> None:
         if holder["rig"] is not None:
             holder["rig"].collect(frame)
@@ -484,6 +765,7 @@ def main():
                      "t_s": round(snap.timestamp.elapsed_seconds - holder["t0"], 4)})
         holder["last_frame"] = frame
         audit.frame(snap, k, holder["ids"], holder["boxes"], holder["tracks"], orc.pose_at)
+        ego.frame(k, snap, holder, trajs, orc.pose_at)
         holder["k"] += 1
         STATE["frames"] = holder["k"]
         if holder["k"] % 50 == 0:
@@ -513,7 +795,15 @@ def main():
             if args.lamp_bridge:
                 STATE["lamps"] = lamps_dark(world, args.lamp_bridge, args.lamp_heads)
                 flush_poses(0.0)
+                if lamp_player is not None and STATE["lamps"].get("ok"):
+                    lamp_player.arm()
             hero = next((a for a in actors if a.attributes.get("role_name") == "hero"), None)
+            if hero is not None:
+                bb = hero.bounding_box
+                holder["hero"] = {"blueprint": hero.type_id, "bbox": {
+                    "extent": [round(bb.extent.x, 4), round(bb.extent.y, 4), round(bb.extent.z, 4)],
+                    "location": [round(bb.location.x, 4), round(bb.location.y, 4),
+                                 round(bb.location.z, 4)]}}
             if rig_spec is not None and hero is None:     # a base scenario: nobody to film from
                 STATE["cameras"] = ("skipped: the hero was not spawned" if "hero" in X["entities"]
                                     else "skipped: the scenario has no hero")
@@ -521,7 +811,7 @@ def main():
                 holder["rig"] = Rig(carla, world, hero, rig_spec, views, out_dir,
                                     int(rig_spec.get("fps", 10)), args.edge_low,
                                     args.edge_high, args.crf)
-            capture(world, world.tick())             # pre-roll: the frame of t = 0
+            capture(world, lamp_tick(world))         # pre-roll: the frame of t = 0
             _orig_run(self)
         except Exception as e:                       # noqa: BLE001 -- reported in run.json
             STATE["capture_error"] = f"{type(e).__name__}: {e}"
@@ -561,7 +851,7 @@ def main():
             world = CarlaDataProvider.get_world()
             try:
                 flush_poses(GameTime.get_time())
-                capture(world, world.tick())
+                capture(world, lamp_tick(world))
             except Exception as e:                   # noqa: BLE001
                 STATE["capture_error"] = f"{type(e).__name__}: {e}"
                 self._running = False
@@ -599,6 +889,31 @@ def main():
                  and STATE["frames"] >= horizon > 0)
     pa = audit.report()
     missing_entities = sorted(set(X["entities"]) - set(holder["ids"]))
+    # trajectory.json: the ego as rendered, in the clips' <prefix>_trajectory.json columns
+    epa = ego.audit()
+    if epa is not None:
+        hero = holder["hero"] or {}
+        box = holder["boxes"].get("hero", (0.0, 0.0, 0.0))
+        (out_dir / "trajectory.json").write_text(json.dumps({
+            "clip": clip, "xosc": str(xosc), "dt_s": DT, "n_states": len(ego.cols["t"]),
+            "ego_blueprint": hero.get("blueprint"),
+            "ego_is_edgar": hero.get("blueprint") == orc.EDGAR_BP,
+            "controlled": "replayed" if "hero" in trajs else "external",
+            "reference_point": "footprint_centre",
+            "ego_origin_shift_m": [round(box[0], 4), round(box[1], 4)],
+            "ego_z_off_m": round(box[2], 4), "ego_bbox": hero.get("bbox"),
+            "frames": {"x, y, yaw": "the file's trajectory point (the ego's box centre), file "
+                                    "frame: x east, y north, yaw rad",
+                       "carla_*": "the same point, CARLA frame (y and angles flipped)",
+                       "z, pitch, roll": "road under the actor origin; the origin sits "
+                                         "ego_z_off_m above z",
+                       "rear_axle_*": "where the actor origin was placed (EDGAR: rear axle)",
+                       "realized_*": "actor transform after the tick, CARLA frame, origin"},
+            "trajectory": ego.cols}, separators=(",", ":")))
+    if lamp_player is not None:
+        (out_dir / "lamps.json").write_text(json.dumps(
+            {"steps": STATE["frames"], "heads": dict(lamp_player.history)}))
+        STATE["lamps"] = {**(STATE["lamps"] or {}), "plan": lamp_player.report(STATE["frames"])}
     checks = {
         "completed": bool(completed),
         "views_complete": bool(views_ok),
@@ -607,9 +922,11 @@ def main():
         "removed_on_time": audit.ghosts == 0,
         "poses_within_tolerance": ((pa["max_m"] or 0.0) <= args.pose_tolerance
                                    and pa["max_dz_m"] <= args.pose_tolerance),
+        "ego_pose_within_tolerance": ego.ok(),
         "pose_batches_applied": STATE["batch_errors"] == 0,
         "frames_in_step": STATE["n_frame_errors"] == 0,
         "lamps_switched": STATE["lamps"] is None or bool(STATE["lamps"].get("ok")),
+        "lamps_followed": lamp_player is None or lamp_player.followed(STATE["frames"]),
     }
     ok = all(checks.values())
     report = {
@@ -633,7 +950,8 @@ def main():
         "pose_batch_errors": STATE["batch_errors"],
         "frame_errors": STATE["n_frame_errors"], "frame_error_examples": STATE["frame_errors"],
         "planner_segments_capped": len(STATE["planner_capped"]),
-        "pose_audit": pa, "views": STATE["views"], "cameras": STATE.get("cameras"),
+        "pose_audit": pa, "ego_pose_audit": epa,
+        "views": STATE["views"], "cameras": STATE.get("cameras"),
         "sr_warnings": [ln for ln in text.splitlines() if "WARNING" in ln][:30],
     }
     (out_dir / "run.json").write_text(json.dumps(report, indent=1))

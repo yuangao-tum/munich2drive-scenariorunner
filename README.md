@@ -59,11 +59,14 @@ report. The full sets are in the private dataset (see [docs/setup.md](docs/setup
 The output is in `runs/scenario_00_ego_5105/`:
 
 - `front.mp4` and `front_edge.mp4`, and the same for all 8 views;
-- `run.json`: completion, spawn check, colours, weather, pose audit, frames per view.
+- `trajectory.json`: the ego at every frame, planned and realized, in the clips' columns;
+- `run.json`: completion, spawn check, colours, weather, pose audits, frames per view.
 
 `run_osc.py` exits with 0 only when every check in `run.json` passes: every agent spawned and was
-in every frame until its removal, every pose within 5 cm of the file, every frame 0.1 s after the
-previous one, and all 16 videos complete.
+in every frame until its removal, every pose within 5 cm of the file, the ego within 0.10 m and 2°
+of its placement, every frame 0.1 s after the previous one, and all 16 videos complete. On the
+Munich server, `--lamp-plan` makes the German lamp heads show the scenario's signals, as in the
+clips ([docs/recording.md](docs/recording.md#lamp-plans-munich)).
 
 To compare a run with the original munich2drive clip:
 

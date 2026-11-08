@@ -127,6 +127,7 @@ sets are on the lab NAS (`AVS-Share`), in the `openscenario/` folder of each set
 | Set | Lab NAS (`AVS-Share`) |
 |---|---|
 | Munich_Route_1 | `Yuan/Mifcom2/Dataset/munich2drive_route1_odd/openscenario/` |
+| Munich_Route_1, div1000 (2,000 scenarios) | `Yuan/Mifcom2/Dataset/munich2drive_div1000/openscenario/` |
 | Page_Mill_Rd_Palo_Alto_CA | `Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_pagemill/openscenario/` |
 | Yale_St_Palo_Alto_CA | `Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_yale/openscenario/` |
 | Belmont_Office_Park_Belmont_CA | `Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_belmont/openscenario/` |
@@ -137,3 +138,5 @@ cp -r /mnt/avs-share/Yuan/Mifcom2/Dataset/bayarea_odd/data_bayarea_yale/openscen
 ```
 
 Keep each set's folder as it is: `osc_replay_control.py` must stay next to the `.xosc` files.
+`index.csv` lists the finished files of a set. The Munich sets also have `lamps/`: one lamp plan
+per scenario, for `--lamp-plan` ([recording.md](recording.md#lamp-plans-munich)).

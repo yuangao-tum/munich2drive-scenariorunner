@@ -62,7 +62,8 @@ CARLA's rendering, which is not deterministic between two runs:
 - **camera effects:** lens flare and temporal anti-aliasing;
 - **traffic lights:** in the clips they followed the scenarios' signal plans; in a re-run they run
   CARLA's own cycles. In Munich, the German lamp heads at signalised junctions were lit in the clips
-  and stay dark in a re-run.
+  and stayed dark in these test runs. Since then `--lamp-plan` plays the scenario's lamp plan
+  ([recording.md](recording.md#lamp-plans-munich)).
 
 ![Page Mill, front view, frame 120: original clip, re-run, edge view of the re-run](media/pagemill_front_original_rerun_edge.png)
 

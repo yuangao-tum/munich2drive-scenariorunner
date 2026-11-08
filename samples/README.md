@@ -36,7 +36,10 @@ python scripts/run_osc.py samples/Belmont_Office_Park_Belmont_CA/scenario_00.xos
 
 On the Munich server, add the two `--lamp-bridge` / `--lamp-heads` arguments that `start_carla.sh`
 prints. They switch the German traffic-light heads dark, as in the clips
-([docs/munich.md](../docs/munich.md)).
+([docs/munich.md](../docs/munich.md)). To let the heads show the scenario's signals, as in the
+clips, also add `--lamp-plan` with the scenario's lamp plan from the Munich set on the NAS
+(`openscenario/lamps/`, [docs/setup.md](../docs/setup.md#4-the-scenario-files)): `scenario_00.json` for
+`scenario_00_ego_6938`, `scenario_02.json` for the two `scenario_02` variants.
 
 The output and `run.json` are described in [docs/recording.md](../docs/recording.md). A run that
 reproduces the scenario exits with 0.
